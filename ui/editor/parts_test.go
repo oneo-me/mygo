@@ -200,6 +200,58 @@ func TestCodeDiffSeparatorWheel(t *testing.T) {
 	}
 }
 
+// TestCodeDiffSeparatorBar checks the default separator: its chevrons end
+// with the gutter and expand a step of its lines when they are more, and a
+// click anywhere on its bar expands them all.
+func TestCodeDiffSeparatorBar(t *testing.T) {
+	lines := make([]string, 400)
+	for i := range lines {
+		lines[i] = "line " + strconv.Itoa(i)
+	}
+	old := strings.Join(lines, "\n")
+	lines[150], lines[300] = "changed", "changed"
+	nw := strings.Join(lines, "\n")
+	view := func(layout DiffLayout) (*DiffState, *ui.Tester) {
+		d := &DiffState{Old: NewBuffer(old), New: NewBuffer(nw), Layout: layout}
+		tt := ui.NewTester(func(c *ui.Context) { DiffView(c, d).Fill() }, 800, 250)
+		tt.Frame()
+		tt.Frame()
+		return d, tt
+	}
+	for _, layout := range []DiffLayout{DiffSplit, DiffUnified} {
+		// 147 lines before the first change, 143 between them, 96 after.
+		d, tt := view(layout)
+		left := &d.eds[0]
+		if layout == DiffUnified {
+			left = &d.eds[1]
+		}
+		up, ok := tt.Find("Expand up")
+		if !ok {
+			t.Fatalf("layout %d: no chevron: %q", layout, tt.Texts())
+		}
+		if up.X+up.W != left.gutterW {
+			t.Errorf("layout %d: the chevron ends at %v, the gutter at %v", layout, up.X+up.W, left.gutterW)
+		}
+		tt.ClickAt(up.X+up.W/2, up.Y+up.H/2)
+		tt.Frame()
+		if !tt.HasText("Expand 47 unmodified lines") {
+			t.Fatalf("layout %d: the chevron did not expand a step: %q", layout, tt.Texts())
+		}
+
+		_, tt = view(layout)
+		sep, ok := tt.Find("Expand 143 unmodified lines")
+		if !ok {
+			t.Fatalf("layout %d: no separator between the changes: %q", layout, tt.Texts())
+		}
+		// Away from its chevrons and its label.
+		tt.ClickAt(sep.X+sep.W-40, sep.Y+sep.H/2)
+		tt.Frame()
+		if tt.HasText("143 unmodified lines") {
+			t.Fatalf("layout %d: clicking the bar left its lines collapsed", layout)
+		}
+	}
+}
+
 // TestCodeEditorHoverLeave checks that the pointer passing over words on
 // its way out of the editor asks for no hover, and that leaving closes
 // the hover it asked for, as in examples/code-editor with its sidebar.

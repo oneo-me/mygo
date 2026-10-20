@@ -46,10 +46,11 @@ typed.
   by their background alone. `NoBackground` leaves out the tints of
   changed lines, and `NoLineNumbers` the numbers.
 - `ContextLines` unchanged lines show around each change, 3 by default.
-  The others collapse into separators of "N unmodified lines", whose
-  buttons show `ExpansionLines` more at a click (100 by default), and all
-  of them with Shift; `ExpandUnchanged`, `ExpandAll` and `CollapseAll`
-  show or collapse them all.
+  The others collapse into separators of "N unmodified lines", which a
+  click anywhere expands; when they are more than `ExpansionLines` (100
+  by default), the chevrons on the gutter show that many more at a click,
+  and all of them with Shift. `ExpandUnchanged`, `ExpandAll` and
+  `CollapseAll` show or collapse them all.
 - `Wrap` wraps long lines, rows of each side keeping their partners
   aligned; `FitContent` makes the viewer as high as its lines, as the
   files of a review in a scroll view.

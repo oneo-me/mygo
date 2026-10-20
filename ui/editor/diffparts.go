@@ -35,6 +35,9 @@ type DiffSeparator struct {
 	a     int // the old line its gap starts at
 	theme *Theme
 	font  ui.Font
+	// gutter and textX are where the viewer's left side ends its gutter
+	// and starts its lines' text, from the separator's left edge.
+	gutter, textX float32
 }
 
 // ExpandUp shows Step more of its lines, those right above the change
@@ -49,68 +52,95 @@ func (s *DiffSeparator) Font() ui.Font { return s.font }
 func (s *DiffSeparator) Theme() *Theme { return s.theme }
 
 // DefaultSeparator builds the viewer's own separator into sep, as
-// Pierre's: a bar with chevrons expanding the lines up and down, or all
-// of them when they are few, and "N unmodified lines", which expands them
-// all; or a hunk's header. Shift expands all the lines from any button.
+// Pierre's: a bar expanding all of its lines when clicked anywhere, with
+// chevrons on the gutter, which expand them up and down instead when they
+// are more than Step, and "N unmodified lines" where the lines' text
+// starts; or a hunk's header there. Shift expands all the lines from the
+// chevrons too.
 func DefaultSeparator(c *ui.Context, sep ui.Element, s *DiffSeparator) {
 	t := c.Theme()
 	tx := l10n.In(c.Locale())
 	ct := s.Theme()
-	sep.Padding(4)
+	const inset = 4
+	sep.Padding(inset)
 	sep.Children(func() {
-		bar := ui.Row(c).Grow(1).AlignSelf(ui.Stretch).AlignItems(ui.Center).Gap(t.Space(0.5)).Padding(0, t.Space(1.5)).
-			Radius(6).Background(mixLab(ct.Background, ct.Text, 0.06))
-		bar.Children(func() {
-			if s.Lines == 0 {
+		bg := mixLab(ct.Background, ct.Text, 0.06)
+		if s.Lines == 0 {
+			bar := ui.Row(c).Grow(1).AlignSelf(ui.Stretch).AlignItems(ui.Center).PaddingStart(max(s.textX-inset, 0)).PaddingEnd(t.Space(1.5)).
+				Radius(6).Background(bg)
+			bar.Children(func() {
 				ui.Text(c, s.Header).Font(s.Font().Family).FontSize(s.Font().Size - 1).TextColor(t.TextMuted).SingleLine().Shrink(1)
-				return
-			}
-			expand := func(fn func()) {
-				if c.Modifiers()&ui.Shift != 0 {
-					fn = s.ExpandAll
-				}
-				fn()
-			}
-			chevron := func(dir int, label string, fn func()) {
-				b := ui.ButtonBase(c).Key(label).Size(20, 20).Radius(4).Label(label).Tooltip(label).Cursor(ui.CursorPointer)
-				if b.Hovered() {
-					b.Background(ct.Text.Alpha(0.08))
-				}
-				b.Draw(func(p *ui.Painter, r ui.Rect) {
-					cx, cy, d := r.X+r.W/2, r.Y+r.H/2, float32(3.5)
-					var path ui.Path
-					switch dir {
-					case 1:
-						path.MoveTo(cx-d, cy-d/2).LineTo(cx, cy+d/2).LineTo(cx+d, cy-d/2)
-					case -1:
-						path.MoveTo(cx-d, cy+d/2).LineTo(cx, cy-d/2).LineTo(cx+d, cy+d/2)
-					default:
-						path.MoveTo(cx-d, cy-2).LineTo(cx, cy-2-d).LineTo(cx+d, cy-2)
-						path.MoveTo(cx-d, cy+2).LineTo(cx, cy+2+d).LineTo(cx+d, cy+2)
+			})
+			return
+		}
+		label := tx.UnmodifiedLines(s.Lines)
+		bar := ui.ButtonBase(c).Key("all").Grow(1).AlignSelf(ui.Stretch).Justify(ui.Start).Radius(6).
+			Label(tx.Expand(label)).Cursor(ui.CursorPointer)
+		if bar.Hovered() {
+			bg = mixLab(ct.Background, ct.Text, 0.1)
+		}
+		bar.Background(bg)
+		if bar.Clicked() {
+			s.ExpandAll()
+		}
+		bar.Children(func() {
+			// The chevrons end where the gutter does, and the label starts
+			// with the lines' text.
+			lead := ui.Row(c).MinWidth(max(s.textX-inset, 0)).Shrink(0).Justify(ui.End).AlignItems(ui.Center).PaddingEnd(max(s.textX-s.gutter, 0))
+			lead.Children(func() {
+				// fn is nil for an icon alone: the bar does the same.
+				chevron := func(dir int, label string, fn func()) {
+					var b ui.Element
+					hovered := false
+					if fn == nil {
+						b = ui.Box(c).Key(label).Size(20, 20)
+					} else {
+						b = ui.ButtonBase(c).Key(label).Size(20, 20).Label(label).Tooltip(label).Cursor(ui.CursorPointer)
+						hovered = b.Hovered()
+						if b.Clicked() {
+							if c.Modifiers()&ui.Shift != 0 {
+								fn = s.ExpandAll
+							}
+							fn()
+						}
 					}
-					p.StrokePath(&path, 1.5, t.TextMuted)
-				})
-				if b.Clicked() {
-					expand(fn)
+					b.Draw(func(p *ui.Painter, r ui.Rect) {
+						cx, cy, d := r.X+r.W/2, r.Y+r.H/2, float32(3.5)
+						var path ui.Path
+						switch dir {
+						case 1:
+							path.MoveTo(cx-d, cy-d/2).LineTo(cx, cy+d/2).LineTo(cx+d, cy-d/2)
+						case -1:
+							path.MoveTo(cx-d, cy+d/2).LineTo(cx, cy-d/2).LineTo(cx+d, cy+d/2)
+						default:
+							path.MoveTo(cx-d, cy-2).LineTo(cx, cy-2-d).LineTo(cx+d, cy-2)
+							path.MoveTo(cx-d, cy+2).LineTo(cx, cy+2+d).LineTo(cx+d, cy+2)
+						}
+						col := t.TextMuted
+						if hovered {
+							col = t.Text
+						}
+						p.StrokePath(&path, 1.5, col)
+					})
 				}
-			}
-			switch {
-			case s.First:
-				chevron(-1, tx.ExpandUp(), s.ExpandUp)
-			case s.Last:
-				chevron(1, tx.ExpandDown(), s.ExpandDown)
-			case s.Lines <= s.Step:
-				chevron(0, tx.ExpandAll(), s.ExpandAll)
-			default:
-				chevron(1, tx.ExpandDown(), s.ExpandDown)
-				chevron(-1, tx.ExpandUp(), s.ExpandUp)
-			}
-			label := tx.UnmodifiedLines(s.Lines)
-			b := ui.ButtonBase(c).Key("all").Padding(t.Space(0.5), t.Space(1)).Radius(4).Label(tx.Expand(label)).Cursor(ui.CursorPointer)
-			b.Children(func() { ui.Text(c, label).FontSize(max(t.FontSize-1, 11)).TextColor(t.TextMuted) })
-			if b.Clicked() {
-				s.ExpandAll()
-			}
+				few := s.Lines <= s.Step
+				switch {
+				case s.First && few:
+					chevron(-1, tx.ExpandUp(), nil)
+				case s.Last && few:
+					chevron(1, tx.ExpandDown(), nil)
+				case few:
+					chevron(0, tx.ExpandAll(), nil)
+				case s.First:
+					chevron(-1, tx.ExpandUp(), s.ExpandUp)
+				case s.Last:
+					chevron(1, tx.ExpandDown(), s.ExpandDown)
+				default:
+					chevron(1, tx.ExpandDown(), s.ExpandDown)
+					chevron(-1, tx.ExpandUp(), s.ExpandUp)
+				}
+			})
+			ui.Text(c, label).FontSize(max(t.FontSize-1, 11)).TextColor(t.TextMuted).SingleLine().Shrink(1)
 		})
 	})
 }
@@ -120,13 +150,17 @@ func DefaultSeparator(c *ui.Context, sep ui.Element, s *DiffSeparator) {
 // them.
 func (d *DiffState) buildSeparators(c *ui.Context, ct *Theme) {
 	ed := &d.eds[1]
+	left := ed
+	if d.Layout != DiffUnified {
+		left = &d.eds[0]
+	}
 	d.built = d.geom()
 	render := d.RenderSeparator
 	if render == nil {
 		render = DefaultSeparator
 	}
 	ed.blocksInView(func(b *block, top float64) {
-		s := &DiffSeparator{d: d, Step: d.expansionLines(), theme: ct, font: ed.view.font}
+		s := &DiffSeparator{d: d, Step: d.expansionLines(), theme: ct, font: ed.view.font, gutter: left.gutterW, textX: left.textX}
 		var key string
 		switch b.kind {
 		case blockSeparator:
