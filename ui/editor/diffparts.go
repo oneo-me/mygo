@@ -144,7 +144,7 @@ func (d *DiffState) buildSeparators(c *ui.Context, ct *Theme) {
 			label = l10n.In(c.Locale()).UnmodifiedLines(s.Lines)
 		}
 		sep := ui.Box(c).Key(key).Absolute().Left(0).Right(ed.trackWidth()).Top(float32(top - ed.scrollY)).Height(b.height).
-			Role(ui.RoleGroup).Label(label).Cursor(ui.CursorDefault).KeepFocus().HandleInput(shield)
+			Role(ui.RoleGroup).Label(label).Cursor(ui.CursorDefault).KeepFocus().HandleInput(ed.overText)
 		render(c, sep, s)
 	})
 }

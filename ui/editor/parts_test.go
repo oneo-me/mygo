@@ -173,6 +173,33 @@ func TestCodeDiffParts(t *testing.T) {
 	}
 }
 
+// TestCodeDiffSeparatorWheel checks that the wheel over a separator
+// scrolls the viewer, as over its lines.
+func TestCodeDiffSeparatorWheel(t *testing.T) {
+	lines := make([]string, 400)
+	for i := range lines {
+		lines[i] = "line " + strconv.Itoa(i)
+	}
+	old := strings.Join(lines, "\n")
+	lines[150], lines[300] = "changed", "changed"
+	nw := strings.Join(lines, "\n")
+	for _, layout := range []DiffLayout{DiffSplit, DiffUnified} {
+		d := &DiffState{Old: NewBuffer(old), New: NewBuffer(nw), Layout: layout}
+		tt := ui.NewTester(func(c *ui.Context) { DiffView(c, d).Fill() }, 800, 250)
+		tt.Frame()
+		tt.Frame()
+		sep, ok := tt.Find("Expand 143 unmodified lines")
+		if !ok {
+			t.Fatalf("layout %d: no separator between the changes: %q", layout, tt.Texts())
+		}
+		tt.Scroll(sep.X+sep.W/2, sep.Y+sep.H/2, 0, 40)
+		tt.Frame()
+		if d.eds[1].scrollY <= 0 {
+			t.Fatalf("layout %d: the wheel over a separator left the scroll at %v", layout, d.eds[1].scrollY)
+		}
+	}
+}
+
 // TestCodeEditorHoverLeave checks that the pointer passing over words on
 // its way out of the editor asks for no hover, and that leaving closes
 // the hover it asked for, as in examples/code-editor with its sidebar.

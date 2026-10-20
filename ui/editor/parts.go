@@ -556,3 +556,11 @@ func (ed *editor) buildHover(c *ui.Context, anchor ui.Element) {
 // goes to the innermost element taking it as it comes, which then leaves
 // it to the buttons and fields inside, as they take it.
 func shield(ui.InputEvent) bool { return false }
+
+// overText shields as shield does what scrolls with the editor's text, as
+// a diff's separators, but for the wheel, which scrolls the editor: the
+// wheel goes to the innermost element taking input, which is never the
+// editor under them.
+func (ed *editor) overText(ev ui.InputEvent) bool {
+	return ev.Kind == ui.InputScroll && ed.input(ev)
+}

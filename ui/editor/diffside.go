@@ -351,7 +351,7 @@ func (s *diffSide) buildBlocks(c *ui.Context, ed *editor) {
 			stacked[at] += float64(a.Height)
 			a := a
 			box := ui.Box(c).Key(fmt.Sprint("annotation ", a.Side, " ", a.Line, " ", a.Key, " ", n)).Absolute().
-				Left(ed.gutterW).Top(float32(top - ed.scrollY)).Width(ed.r.W - ed.gutterW).Height(a.Height).HandleInput(shield)
+				Left(ed.gutterW).Top(float32(top - ed.scrollY)).Width(ed.r.W - ed.gutterW).Height(a.Height).HandleInput(ed.overText)
 			box.Children(func() { d.RenderAnnotation(c, a) })
 		}
 	}
@@ -389,7 +389,7 @@ func (s *diffSide) buildBlocks(c *ui.Context, ed *editor) {
 				continue
 			}
 			bar := ui.Row(c).Key(fmt.Sprint("hunk actions ", i)).Absolute().Right(ed.trackWidth() + 6).Top(float32(top-ed.scrollY) + 2).
-				Cursor(ui.CursorDefault).KeepFocus().HandleInput(shield)
+				Cursor(ui.CursorDefault).KeepFocus().HandleInput(ed.overText)
 			render := d.RenderHunkActions
 			if render == nil {
 				render = DefaultHunkActions
@@ -402,7 +402,7 @@ func (s *diffSide) buildBlocks(c *ui.Context, ed *editor) {
 		g := h.geometry(ed.hoverLine)
 		if !g.hidden {
 			line := DiffLineRange{Side: side, Start: ed.hoverLine, End: ed.hoverLine}
-			ui.Box(c).Key("gutter button").Absolute().Left(2).Top(float32(g.rows-ed.scrollY) + 2).HandleInput(shield).Children(func() {
+			ui.Box(c).Key("gutter button").Absolute().Left(2).Top(float32(g.rows-ed.scrollY) + 2).HandleInput(ed.overText).Children(func() {
 				btn := ui.ButtonBase(c).Size(16, v.lineHeight-4).Cursor(ui.CursorPointer).KeepFocus()
 				render := d.RenderGutterButton
 				if render == nil {
