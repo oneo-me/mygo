@@ -39,7 +39,11 @@ type app struct {
 }
 
 func newFile(name, text string) *file {
-	f := &file{name: name, original: editor.NewBuffer(text)}
+	was := text
+	for _, e := range edited[name] {
+		was = strings.Replace(was, e[0], e[1], 1)
+	}
+	f := &file{name: name, original: editor.NewBuffer(was)}
 	buf := editor.NewBuffer(text)
 	lang := editor.LanguageFor(name)
 	buf.SetLanguage(lang)

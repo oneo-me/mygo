@@ -113,3 +113,15 @@ if __name__ == "__main__":
 `},
 	{"README.md", "# Code editor\n\nAn example of **MyGo**'s `ui.CodeEditor` and `ui.DiffViewer`.\n\n- Edit a file, then open *Changes*.\n- Press `Cmd+D` to select the next occurrence.\n\n```go\nst := &ui.CodeEditorState{Buffer: ui.NewCodeBuffer(src)}\nui.CodeEditor(c, st).Fill()\n```\n"},
 }
+
+// edited holds the lines of samples as they were before they were
+// edited, which the Changes page shows from the start: each the line now,
+// then the line as it was ("" when it was not there).
+var edited = map[string][][2]string{
+	"server.go": {
+		{"\t\"strings\"\n", ""},
+		{"strings.TrimSpace(r.URL.Query().Get(\"name\"))", "r.URL.Query().Get(\"name\")"},
+		{"\t// TODO: rate limit greetings per address.\n", ""},
+		{"fmt.Sprintf(\"%s, %s!\", s.prefix, name)", "s.prefix + \", \" + name + \"!\""},
+	},
+}
