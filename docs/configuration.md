@@ -70,6 +70,7 @@ New projects set `out` to `build`, apart from Vite's `dist`.
 | `resources` | files and directories copied into the app of every platform, next to the contents of the `resources` directory, under their base names; see [resources](distribution.md#resources), and [platform resources](distribution.md#platform-resources) for the files of one platform |
 | `urlSchemes` | the URL schemes the app opens, such as `myapp` for `myapp://…`, which reach `App.OnOpenURL`; see [deep links](app.md#deep-links) |
 | `fileAssociations` | the file types the app opens, which reach `App.OnOpenFile`; see [file associations](app.md#file-associations) |
+| `widgets` | the kinds of the app's widgets on macOS and iOS, whose content package `widget` gives; `mygo build` and `mygo dev` put a widget extension into the app, which needs Xcode. See [Widgets](widgets.md) |
 
 Each file association has:
 
@@ -79,6 +80,15 @@ Each file association has:
 | `name` | what the files are: `"Markdown Document"` |
 | `mimeType` | their MIME type, by which Linux identifies files; without one the app defines `application/x-<app>-<ext>` |
 | `role` | `Editor` (the default) or `Viewer`, on macOS |
+
+Each widget has:
+
+| Field | |
+|---|---|
+| `kind` | what `widget.Update` names it: letters, digits, `.`, `_` and `-` |
+| `name` | its name in the system's gallery of widgets (default: the kind) |
+| `description` | what it shows, in the gallery |
+| `families` | the sizes it comes in: `small`, `medium`, `large`, `extraLarge`, and on the Lock Screen `circular`, `rectangular` and `inline` (default: `small`, `medium` and `large`) |
 
 ## i18n
 
@@ -117,6 +127,8 @@ Signed [auto-updates](updates.md). `publicKey` and one of `github` and
 | `provisioningProfile` | | a profile embedded as `Contents/embedded.provisionprofile` before signing; must match the app's identifier, entitlements and signing identity; cannot be used with ad-hoc signing. See [provisioning profiles](distribution.md#provisioning-profiles) |
 | `helperEntitlements` | | property lists of entitlements for code among the resources, by its path there, e.g. `{ "bin/server": "server.entitlements.plist" }`; other code keeps the entitlements it is signed with. See [helper executables](distribution.md#helper-executables) |
 | `infoPlist` | | keys added to the app's `Info.plist`, replacing MyGo's, e.g. `NSCameraUsageDescription` |
+| `appGroup` | | an app group the app shares with its [widgets](widgets.md#where-the-content-lives), which an app in the App Sandbox needs; without one, the app writes what they show to `~/Library/Application Support/<identifier>/Widgets` |
+| `widgetsProvisioningProfile` | | a profile embedded in the widget extension (`<identifier>.widgets`), as `provisioningProfile` is in the app |
 | `dmgTitle` | `name` | the volume name of the disk image |
 | `notarize` | | notarizes production disk images: `keychainProfile`, the profile of `xcrun notarytool store-credentials`, and optionally `keychain`, the keychain holding it |
 
@@ -131,6 +143,8 @@ See [macOS](distribution.md#macos).
 | `provisioningProfile` | | the `.mobileprovision` embedded in the app for devices, which must allow its identifier, devices and signing identity |
 | `entitlements` | the profile's | a property list of entitlements to sign the app for devices with |
 | `infoPlist` | | keys added to the app's `Info.plist`, replacing MyGo's, e.g. `NSCameraUsageDescription` |
+| `appGroup` | `group.<identifier>` | the app group the app shares with its [widgets](widgets.md#where-the-content-lives), which both provisioning profiles must grant |
+| `widgetsProvisioningProfile` | | the `.mobileprovision` of the widget extension (`<identifier>.widgets`) for devices, whose entitlements it is signed with |
 | `simulator` | the one booted, else the first iPhone | the simulator `mygo dev -ios` runs the app in, by name or UDID |
 
 See [iOS](distribution.md#ios).

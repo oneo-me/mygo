@@ -1946,6 +1946,7 @@ var needsAppCalls = []struct {
 	{"Network.Status", func() { Network.Status() }},
 	{"Dialog.Open", func() { Dialog.Open(OpenDialogOptions{}) }},
 	{"Dialog.Save", func() { Dialog.Save(SaveDialogOptions{}) }},
+	{"Dialog.OpenPhotos", func() { Dialog.OpenPhotos(PhotoDialogOptions{}) }},
 	{"Dialog.Message", func() { Dialog.Message(MessageOptions{}) }},
 	{"Dialog.Error", func() { Dialog.Error("title", "content") }},
 	{"Menu.Popup", func() { NewMenu(nil).Popup(nil) }},

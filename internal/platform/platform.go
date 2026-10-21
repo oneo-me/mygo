@@ -771,6 +771,29 @@ type SaveDialogOptions struct {
 	ShowHiddenFiles            bool
 	CreateDirectories          bool
 	TreatPackagesAsDirectories bool
+	// Untitled names the file, in the app's language, for a backend that
+	// needs a name when DefaultPath has none (iOS).
+	Untitled string
+}
+
+// PhotoPickerOptions configures a picker of the user's photo library.
+type PhotoPickerOptions struct {
+	// Images and Videos are what it shows; at least one is true.
+	Images, Videos bool
+	// Limit is how many the user may pick, 0 for any number.
+	Limit int
+	// Compatible asks for JPEG and H.264 in place of the HEIF and HEVC
+	// the library may keep.
+	Compatible bool
+}
+
+// PhotoPicker is implemented by the Dialogs of backends with a picker of
+// the user's photo library (iOS); the core shows a file dialog of images
+// and videos elsewhere. The callback runs on the main thread exactly
+// once, with the paths of copies of what the user picked, which the app
+// owns, nil when canceled.
+type PhotoPicker interface {
+	ShowPhotoPicker(parent Window, opts *PhotoPickerOptions, cb func(paths []string, err error))
 }
 
 // MessageBoxOptions configures a message box.

@@ -1,6 +1,7 @@
 package mygo
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/egoist/mygo/internal/platform"
@@ -59,6 +60,37 @@ type SaveDialogOptions struct {
 	TreatPackagesAsDirectories bool
 }
 
+// PhotoKind selects what Dialog.OpenPhotos picks.
+type PhotoKind int
+
+// The kinds of media Dialog.OpenPhotos picks.
+const (
+	// PhotoImages picks images, Live Photos as their still images.
+	PhotoImages PhotoKind = iota
+	// PhotoVideos picks videos.
+	PhotoVideos
+	// PhotoImagesAndVideos picks either.
+	PhotoImagesAndVideos
+)
+
+// PhotoDialogOptions configures Dialog.OpenPhotos.
+type PhotoDialogOptions struct {
+	// Parent attaches the dialog to a window, as Dialog.Open's.
+	Parent *Window
+	// Title is the title of the file dialog that stands in for the
+	// photo library where there is none.
+	Title string
+	// Kind is what the user picks: images by default.
+	Kind PhotoKind
+	// Multiple allows picking several, up to Limit when it is above zero.
+	Multiple bool
+	Limit    int
+	// Compatible asks the photo library for JPEG images and H.264
+	// videos in place of the HEIF and HEVC it may keep, converting them
+	// (iOS). Without it, the files are the originals.
+	Compatible bool
+}
+
 // MessageType selects the icon of a message dialog.
 type MessageType string
 
@@ -114,7 +146,11 @@ func toFilters(fs []FileFilter) []platform.FileFilter {
 }
 
 // Open shows a dialog to pick files or directories and returns the chosen
-// paths, or nil when canceled.
+// paths, or nil when canceled. On iOS it is the document picker of the
+// Files app, which gives the app copies of the files picked, in its
+// temporary directory; a directory picked is the user's own, which the
+// app may read and write while it runs. The options that iOS's picker
+// has nothing for, as titles and labels, do nothing there.
 func (DialogModule) Open(opts OpenDialogOptions) ([]string, error) {
 	needsApp("Dialog.Open")
 	type result struct {
@@ -146,8 +182,79 @@ func (DialogModule) Open(opts OpenDialogOptions) ([]string, error) {
 	return r.paths, r.err
 }
 
+// OpenPhotos shows a dialog to pick images or videos from the user's photo
+// library and returns the paths of copies of them in the temporary
+// directory, which the app owns, or nil when canceled. On iOS it is the
+// Photos picker, which needs no permission to read the library: the app
+// sees only what the user picks. Elsewhere it is the file dialog of
+// Dialog.Open, showing images, videos or both, whose paths are the
+// files themselves.
+func (DialogModule) OpenPhotos(opts PhotoDialogOptions) ([]string, error) {
+	needsApp("Dialog.OpenPhotos")
+	type result struct {
+		paths []string
+		err   error
+	}
+	limit := 1
+	if opts.Multiple {
+		limit = max(opts.Limit, 0)
+	}
+	picker := &platform.PhotoPickerOptions{
+		Images:     opts.Kind != PhotoVideos,
+		Videos:     opts.Kind != PhotoImages,
+		Limit:      limit,
+		Compatible: opts.Compatible,
+	}
+	ch := make(chan result, 1)
+	done := func(paths []string, err error) {
+		if limit > 0 && len(paths) > limit {
+			paths = paths[:limit] // a file dialog takes any number
+		}
+		deliver(ch, result{paths, err})
+	}
+	if !postMain(func() {
+		d := backend().Dialogs()
+		if p, ok := d.(platform.PhotoPicker); ok {
+			p.ShowPhotoPicker(opts.Parent.nativeOrNil(), picker, done)
+			return
+		}
+		d.ShowOpenDialog(opts.Parent.nativeOrNil(), &platform.OpenDialogOptions{
+			Title:     opts.Title,
+			Filters:   []platform.FileFilter{photoFilter(opts.Kind)},
+			OpenFiles: true,
+			Multiple:  opts.Multiple,
+		}, done)
+	}) {
+		return nil, errLoopStopped
+	}
+	r := await(ch)
+	return r.paths, r.err
+}
+
+// The extensions of the images and videos of Dialog.OpenPhotos's file
+// dialog: those photo libraries and cameras keep, and the web's.
+var (
+	imageExtensions = []string{"jpg", "jpeg", "png", "heic", "heif", "gif", "webp", "avif", "tif", "tiff", "bmp"}
+	videoExtensions = []string{"mov", "mp4", "m4v", "webm", "mkv", "avi", "3gp"}
+)
+
+// photoFilter is the filter of the file dialog that stands in for the
+// photo library.
+func photoFilter(kind PhotoKind) platform.FileFilter {
+	tx := menuMessages()
+	switch kind {
+	case PhotoVideos:
+		return platform.FileFilter{Name: tx.Videos(), Extensions: videoExtensions}
+	case PhotoImagesAndVideos:
+		return platform.FileFilter{Name: tx.ImagesAndVideos(), Extensions: append(slices.Clone(imageExtensions), videoExtensions...)}
+	}
+	return platform.FileFilter{Name: tx.Images(), Extensions: imageExtensions}
+}
+
 // Save shows a dialog to choose where to save a file and returns the path,
-// or "" when canceled.
+// or "" when canceled. On iOS the document picker of the Files app moves
+// an empty file named after DefaultPath where the user chooses, which the
+// app then writes, while it runs.
 func (DialogModule) Save(opts SaveDialogOptions) (string, error) {
 	needsApp("Dialog.Save")
 	type result struct {
@@ -165,6 +272,7 @@ func (DialogModule) Save(opts SaveDialogOptions) (string, error) {
 		ShowHiddenFiles:            opts.ShowHiddenFiles,
 		CreateDirectories:          opts.CreateDirectories,
 		TreatPackagesAsDirectories: opts.TreatPackagesAsDirectories,
+		Untitled:                   menuMessages().Untitled(),
 	}
 	if !postMain(func() {
 		backend().Dialogs().ShowSaveDialog(opts.Parent.nativeOrNil(), popts, func(path string, err error) {

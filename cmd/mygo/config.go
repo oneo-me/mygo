@@ -78,6 +78,10 @@ type Config struct {
 	// FileAssociations are the types of files the app opens, which reach
 	// mygo.App.OnOpenFile.
 	FileAssociations []FileAssociation `json:"fileAssociations"`
+	// Widgets are the kinds of the app's widgets on macOS and iOS, which
+	// package widget gives their content: mygo build and mygo dev put a
+	// widget extension showing them into the app, which needs Xcode.
+	Widgets []Widget `json:"widgets"`
 	// I18n configures the catalogs of the app's messages, which make the
 	// languages it ships. Without it, the app ships English only.
 	I18n *I18n `json:"i18n"`
@@ -122,6 +126,22 @@ type FileAssociation struct {
 	MimeType string `json:"mimeType"`
 	// Role is "Editor" (default) or "Viewer" (macOS).
 	Role string `json:"role"`
+}
+
+// Widget is a kind of widget, which the user adds from the system's
+// gallery of widgets, and which shows what widget.Update gives its kind.
+type Widget struct {
+	// Kind names it for widget.Update: letters, digits, '.', '_' and
+	// '-'.
+	Kind string `json:"kind"`
+	// Name and Description present it in the gallery (default name: the
+	// kind).
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	// Families are the sizes it comes in: "small", "medium", "large",
+	// "extraLarge" (iPads and Macs), and on the Lock Screen "circular",
+	// "rectangular" and "inline" (default: small, medium and large).
+	Families []string `json:"families"`
 }
 
 // mimeType returns the MIME type of an association, and whether the app
@@ -179,6 +199,17 @@ type MacOS struct {
 	// the camera or the microphone:
 	//   "NSCameraUsageDescription": "Scan documents with the camera."
 	InfoPlist map[string]any `json:"infoPlist"`
+	// AppGroup is an app group the app shares with its widgets, whose
+	// container holds what they show, which an app in the App Sandbox
+	// needs, as those of the Mac App Store: its provisioning profiles
+	// must grant it. Without one, the app writes what they show to
+	// ~/Library/Application Support/<identifier>/Widgets, which their
+	// extension is allowed to read.
+	AppGroup string `json:"appGroup"`
+	// WidgetsProvisioningProfile is embedded in the widget extension
+	// (identifier "<identifier>.widgets") before signing, as
+	// provisioningProfile is in the app.
+	WidgetsProvisioningProfile string `json:"widgetsProvisioningProfile"`
 	// DMGTitle is the volume name of the disk image (default: name).
 	DMGTitle string `json:"dmgTitle"`
 	// Notarize submits production disk images to Apple's notary service and
@@ -207,6 +238,14 @@ type IOS struct {
 	// replace MyGo's own, e.g. usage descriptions:
 	//   "NSCameraUsageDescription": "Scan documents with the camera."
 	InfoPlist map[string]any `json:"infoPlist"`
+	// AppGroup is the app group the app shares with its widgets, whose
+	// container holds what they show (default: "group.<identifier>").
+	// Both provisioning profiles must grant it.
+	AppGroup string `json:"appGroup"`
+	// WidgetsProvisioningProfile is the .mobileprovision of the widget
+	// extension (identifier "<identifier>.widgets") for devices, which
+	// its entitlements come from.
+	WidgetsProvisioningProfile string `json:"widgetsProvisioningProfile"`
 	// Simulator is the simulator mygo dev -ios runs the app in, by name or
 	// UDID (default: the one booted, else the first iPhone).
 	Simulator string `json:"simulator"`
@@ -281,6 +320,9 @@ func (c *Config) validate() error {
 		if fa.Role != "" && fa.Role != "Editor" && fa.Role != "Viewer" {
 			return fmt.Errorf("fileAssociations[%d].role is Editor or Viewer", i)
 		}
+	}
+	if err := c.validateWidgets(); err != nil {
+		return err
 	}
 	if ext := strings.ToLower(filepath.Ext(c.MacOS.Icon)); c.MacOS.Icon != "" && ext != ".car" && ext != ".icon" {
 		return fmt.Errorf("macos.icon %s is an Assets.car or an Icon Composer .icon", c.MacOS.Icon)

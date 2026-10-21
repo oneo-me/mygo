@@ -80,6 +80,7 @@ go run ./examples/markdown-chat            # Markdown replies streaming in (ui/m
 go run ./examples/notes                    # the rich text editor (ui/richtext), in a notes app
 go run ./examples/terminal                 # a terminal (downloads libghostty-vt once)
 go run ./examples/loading                  # loading.dev's 29 indicators (plugins/loading)
+go run ./cmd/mygo dev examples/widgets     # widgets (package widget) on macOS; -ios in the simulator (Xcode)
 go generate ./plugins/terminal             # build libghostty-vt for every platform (with Zig), write Ghostty's themes
 go generate ./internal/gpu/d3d11           # recompile the Direct3D shader (on Windows)
 go generate ./internal/gpu/metal           # recompile the Metal shader (on macOS, with Xcode)
@@ -135,6 +136,11 @@ Windows GUI tests need Windows with the WebView2 Runtime (a GitHub Actions
   guide); never commit the CLI's binaries.
 - The configuration types of `packages/cli/index.d.ts` (for `mygo.config.ts`)
   mirror `Config` in `cmd/mygo/config.go`; `TestConfigTypes` checks them.
+- Widgets: package `widget` writes timelines that the widget extension
+  draws, SwiftUI in `cmd/mygo/widgets` that `mygo build` and `mygo dev`
+  compile with Xcode's swiftc; nothing of it is linked into the Go
+  binary. Keep the Info.plist keys, paths and the reload function the
+  same on both sides (`TestWidgetsAgree`).
 - Tests: unit tests through `internal/fake`; GUI behavior in `internal/e2e`.
 - Tests never pass or fail on wall-clock time ("Waiting in tests" in the
   architecture guide): wait for the condition or event with

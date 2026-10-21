@@ -290,6 +290,16 @@ func buildPlatform(c *Config, goos, goarch string, opts buildOptions) ([]string,
 		if err != nil {
 			return nil, err
 		}
+		switch {
+		case len(c.Widgets) == 0:
+		case runtime.GOOS != "darwin":
+			warnf("Leaving out the widgets: compiling them needs a Mac with Xcode")
+		default:
+			t := con.start("Compiling the widgets")
+			if err := t.end(addMacWidgets(c, app, goarch), "Compiled the widgets"); err != nil {
+				return nil, err
+			}
+		}
 		inProject := func(r resource) bool {
 			return r.lipo != "" && strings.HasPrefix(r.src, c.path(resourcesDir)+string(filepath.Separator))
 		}

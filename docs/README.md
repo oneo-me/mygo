@@ -106,6 +106,8 @@ What every app has, whether its windows show native UI or web pages.
 - [Launchers](launchers.md): apps in the manner of Spotlight and Raycast,
   summoned by a shortcut over every app, which find and open the apps
   installed.
+- [Widgets](widgets.md): the app's widgets on the Home Screen and the Lock
+  Screen of iPhones and iPads, and on the desktop of Macs, written in Go.
 
 ## Native UI
 

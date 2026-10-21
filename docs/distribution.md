@@ -365,6 +365,20 @@ Keep profiles out of version control and provide their paths through the
 build environment. See Apple's
 [Inside code signing: provisioning profiles](https://developer.apple.com/documentation/technotes/tn3125-inside-code-signing-provisioning-profiles).
 
+### Widgets on macOS
+
+An app with [widgets](widgets.md) gets their extension,
+`Contents/PlugIns/Widgets.appex`, compiled with Xcode's Swift compiler,
+and `Contents/Frameworks/libMyGoWidgetKit.dylib`, through which the app
+reloads them. Both are signed like the app before it, the extension in
+the App Sandbox, as macOS runs widgets, allowed to read
+`~/Library/Application Support/<identifier>/Widgets`, where the app
+writes what they show. With `macos.appGroup`, which an app in the App
+Sandbox needs, the app and the extension are signed with the group
+instead; their profiles, `macos.provisioningProfile` and
+`macos.widgetsProvisioningProfile` (for `<identifier>.widgets`), must
+grant it.
+
 ## iOS
 
 Apps of [native UI](ui/ios.md) also build for iPhones and iPads, with
@@ -382,7 +396,13 @@ Devices install apps signed for them: `ios.signingIdentity`, an Apple
 Development or Distribution certificate, signs the app, with
 `ios.provisioningProfile` embedded as `embedded.mobileprovision` and the
 entitlements the profile grants, or those of `ios.entitlements`. Without
-an identity, the app for devices is left unsigned. The `.ipa` holds the
+an identity, the app for devices is left unsigned. An app with
+[widgets](widgets.md) has their extension, `PlugIns/Widgets.appex`, and
+`Frameworks/MyGoWidgetKit.framework`, and shares an app group with them,
+`ios.appGroup` (default: `group.<identifier>`): enable App Groups for
+the identifiers of the app and of `<identifier>.widgets` with that group,
+and give the extension a profile of its own,
+`ios.widgetsProvisioningProfile`, whose entitlements sign it. The `.ipa` holds the
 app as App Store Connect and other installers take it; App Store
 submission also checks what Xcode's archives carry, such as an asset
 catalog of icons, which these builds do not make yet. See

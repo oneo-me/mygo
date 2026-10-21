@@ -1,0 +1,14 @@
+{
+  "name": "MyGo Widgets",
+  "identifier": "dev.mygo.examples.widgets",
+  "out": "build",
+  "urlSchemes": ["mygo-widgets"],
+  "widgets": [
+    {
+      "kind": "counter",
+      "name": "Counter",
+      "description": "The count of MyGo Widgets, over a photo of yours.",
+      "families": ["small", "medium", "circular", "rectangular", "inline"]
+    }
+  ]
+}

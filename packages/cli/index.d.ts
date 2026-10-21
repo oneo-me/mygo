@@ -98,6 +98,12 @@ export interface Config {
   /** The types of files the app opens, which reach `App.OnOpenFile`. */
   fileAssociations?: FileAssociation[];
   /**
+   * The kinds of the app's widgets on macOS and iOS, whose content package
+   * `widget` gives. `mygo build` and `mygo dev` put a widget extension into
+   * the app, which needs Xcode.
+   */
+  widgets?: Widget[];
+  /**
    * The catalogs of the app's messages, which make the languages it ships.
    * Without it, the app ships English only.
    */
@@ -182,6 +188,18 @@ export interface S3Config {
 }
 
 /** macOS packaging. */
+/** A kind of widget, which shows what `widget.Update` gives its kind. */
+export interface Widget {
+  /** What `widget.Update` names it: letters, digits, `.`, `_` and `-`. */
+  kind: string;
+  /** Its name in the system's gallery of widgets (default: the kind). */
+  name?: string;
+  /** What it shows, in the gallery. */
+  description?: string;
+  /** The sizes it comes in (default: small, medium and large). */
+  families?: ("small" | "medium" | "large" | "extraLarge" | "circular" | "rectangular" | "inline")[];
+}
+
 export interface MacOSConfig {
   /**
    * The icon as an asset catalog: an `Assets.car` compiled with actool (its
@@ -212,6 +230,15 @@ export interface MacOSConfig {
   helperEntitlements?: Record<string, string>;
   /** Keys added to the app's Info.plist, replacing MyGo's, e.g. `NSCameraUsageDescription`. */
   infoPlist?: Record<string, unknown>;
+  /**
+   * An app group the app shares with its widgets, which an app in the App
+   * Sandbox needs. Without one, the app writes what they show to
+   * `~/Library/Application Support/<identifier>/Widgets`, which their
+   * extension may read.
+   */
+  appGroup?: string;
+  /** A provisioning profile embedded in the widget extension (`<identifier>.widgets`). */
+  widgetsProvisioningProfile?: string;
   /** The volume name of the disk image (default: the name). */
   dmgTitle?: string;
   /** Notarizes production disk images. */
@@ -233,6 +260,10 @@ export interface IOSConfig {
   entitlements?: string;
   /** Keys added to the app's Info.plist, replacing MyGo's, e.g. `NSCameraUsageDescription`. */
   infoPlist?: Record<string, unknown>;
+  /** The app group the app shares with its widgets (default: `group.<identifier>`), which both provisioning profiles must grant. */
+  appGroup?: string;
+  /** The `.mobileprovision` of the widget extension (`<identifier>.widgets`) for devices. */
+  widgetsProvisioningProfile?: string;
   /** The simulator `mygo dev -ios` runs the app in, by name or UDID (default: the one booted, else the first iPhone). */
   simulator?: string;
 }

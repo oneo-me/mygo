@@ -169,6 +169,11 @@ without them, and `<name> <version>.ipa`. `ios-simulator` builds it for the
 simulator into `<out>/ios-simulator-<arch>`, signed ad hoc. Both need a Mac
 with Xcode. See [iOS](ui/ios.md).
 
+With `widgets` in the configuration, the apps of macOS and iOS get a widget
+extension, compiled with Xcode's Swift compiler, which `mygo dev` puts into
+its apps too; elsewhere than on a Mac, builds for macOS leave it out. See
+[Widgets](widgets.md).
+
 | Flag | |
 |---|---|
 | `-platform` | comma separated `GOOS/GOARCH` targets, e.g. `darwin/universal,windows/amd64,linux/amd64`, `web`, `ios` or `ios-simulator` (default: this machine's) |

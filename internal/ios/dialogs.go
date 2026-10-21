@@ -158,16 +158,6 @@ func (d dialogs) ShowMessageBox(_ platform.Window, o *platform.MessageBoxOptions
 	})
 }
 
-// File dialogs are not supported yet: iOS picks documents with
-// UIDocumentPickerViewController, whose files the app gets copies of.
-func (dialogs) ShowOpenDialog(_ platform.Window, _ *platform.OpenDialogOptions, cb func([]string, error)) {
-	cb(nil, errUnsupported)
-}
-
-func (dialogs) ShowSaveDialog(_ platform.Window, _ *platform.SaveDialogOptions, cb func(string, error)) {
-	cb("", errUnsupported)
-}
-
 // PopupMenu shows a context menu as an action sheet of its items, the
 // items of its submenus after theirs, and waits until it is dismissed.
 func (b *Backend) PopupMenu(m *platform.Menu, pw platform.Window, pos *platform.Point) {

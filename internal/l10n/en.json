@@ -653,6 +653,18 @@
       }
     }
   },
+  "images": "Images",
+  "@images": {
+    "description": "Names the filter of a file dialog that shows image files, as the one that picks photos where there is no photo library."
+  },
+  "videos": "Videos",
+  "@videos": {
+    "description": "Names the filter of a file dialog that shows video files, as the one that picks videos where there is no photo library."
+  },
+  "imagesAndVideos": "Images and Videos",
+  "@imagesAndVideos": {
+    "description": "Names the filter of a file dialog that shows image and video files, as the one that picks photos and videos where there is no photo library."
+  },
   "cancel": "Cancel",
   "@cancel": {
     "description": "A button of a dialog that cancels what it asks about."

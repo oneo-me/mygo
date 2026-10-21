@@ -47,6 +47,11 @@ type Backend struct {
 	byDelegate map[id]*webView
 	byWebView  map[id]*webView
 	byAccess   map[id]*accessElement
+	// byPicker are the pickers presented (pickers.go), with what they
+	// call once the user picked or canceled; pickers is their delegate,
+	// made with the first.
+	byPicker map[id]func(picked id)
+	pickers  id
 
 	// theme is the appearance the app asked for: "system", "light" or
 	// "dark".
@@ -71,6 +76,7 @@ func New() *Backend {
 		byDelegate: map[id]*webView{},
 		byWebView:  map[id]*webView{},
 		byAccess:   map[id]*accessElement{},
+		byPicker:   map[id]func(id){},
 		theme:      "system",
 	}
 }

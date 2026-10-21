@@ -162,6 +162,12 @@ func buildIOS(c *Config, t iosTarget, opts buildOptions) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(c.Widgets) > 0 {
+		tk := con.start("Compiling the widgets")
+		if err := tk.end(addIOSWidgets(c, app, t), "Compiled the widgets"); err != nil {
+			return nil, err
+		}
+	}
 	artifacts := []string{app}
 	if t.simulator {
 		if err := signIOS(c, app, "-", ""); err != nil {
@@ -341,6 +347,9 @@ func iosInfoPlist(c *Config, executable string, t iosTarget, icons bool) []byte 
 		}
 		d["CFBundleURLTypes"] = []any{map[string]any{"CFBundleURLName": c.Identifier, "CFBundleURLSchemes": schemes}}
 	}
+	if len(c.Widgets) > 0 {
+		d[appGroupKey] = c.iosAppGroup()
+	}
 	for k, v := range c.IOS.InfoPlist {
 		d[k] = v // the app's own keys win
 	}
@@ -359,6 +368,20 @@ func iosInfoPlist(c *Config, executable string, t iosTarget, icons bool) []byte 
 // entitlements of ios.entitlements, else the profile's, written in work.
 func signIOS(c *Config, app, identity, work string) error {
 	args := []string{"--force", "--sign", identity}
+	if appex := iosWidgetsAppex(app); appex != "" {
+		dir, err := os.MkdirTemp(work, "mygo-sign-")
+		if err != nil {
+			return err
+		}
+		defer os.RemoveAll(dir)
+		entitlements, err := signIOSWidgets(c, app, appex, identity, dir)
+		if err != nil {
+			return err
+		}
+		if entitlements != "" {
+			args = append(args, "--entitlements", entitlements)
+		}
+	}
 	if identity != "-" {
 		if err := copyFile(c.path(c.IOS.ProvisioningProfile), filepath.Join(app, "embedded.mobileprovision"), 0o644); err != nil {
 			return fmt.Errorf("provisioning profile %s: %w", c.IOS.ProvisioningProfile, err)
@@ -573,6 +596,12 @@ func runIOSDev(ctx context.Context, c *Config, env []string) error {
 			path, err := writeIOSBundle(dc, dir, bin, t)
 			if err != nil {
 				return err
+			}
+			if len(dc.Widgets) > 0 {
+				tk.set("compiling the widgets")
+				if err := addIOSWidgets(dc, path, t); err != nil {
+					return err
+				}
 			}
 			if err := signIOS(dc, path, "-", ""); err != nil {
 				return err

@@ -2078,6 +2078,54 @@ func (msgs Messages) UntitledNumbered(n int) string {
 	return Catalog.Format(msgs.locale, "untitledNumbered", map[string]any{"n": n})
 }
 
+// Images says "Images"
+// in the language the app shows.
+//
+// Names the filter of a file dialog that shows image files, as the one that
+// picks photos where there is no photo library.
+func Images() string { return In(i18n.Locale()).Images() }
+
+// Images says "Images"
+// in the language of msgs.
+//
+// Names the filter of a file dialog that shows image files, as the one that
+// picks photos where there is no photo library.
+func (msgs Messages) Images() string {
+	return Catalog.Format(msgs.locale, "images", nil)
+}
+
+// Videos says "Videos"
+// in the language the app shows.
+//
+// Names the filter of a file dialog that shows video files, as the one that
+// picks videos where there is no photo library.
+func Videos() string { return In(i18n.Locale()).Videos() }
+
+// Videos says "Videos"
+// in the language of msgs.
+//
+// Names the filter of a file dialog that shows video files, as the one that
+// picks videos where there is no photo library.
+func (msgs Messages) Videos() string {
+	return Catalog.Format(msgs.locale, "videos", nil)
+}
+
+// ImagesAndVideos says "Images and Videos"
+// in the language the app shows.
+//
+// Names the filter of a file dialog that shows image and video files, as
+// the one that picks photos and videos where there is no photo library.
+func ImagesAndVideos() string { return In(i18n.Locale()).ImagesAndVideos() }
+
+// ImagesAndVideos says "Images and Videos"
+// in the language of msgs.
+//
+// Names the filter of a file dialog that shows image and video files, as
+// the one that picks photos and videos where there is no photo library.
+func (msgs Messages) ImagesAndVideos() string {
+	return Catalog.Format(msgs.locale, "imagesAndVideos", nil)
+}
+
 // Cancel says "Cancel"
 // in the language the app shows.
 //

@@ -604,6 +604,9 @@ func (s *devSession) buildAndLaunch(ctx context.Context, t *task, running [32]by
 		if err := hashEntitlements(h, dc); err != nil {
 			return nil, sum, err
 		}
+		if len(dc.Widgets) > 0 {
+			h.Write([]byte(kindsSwift(dc)))
+		}
 	}
 	copy(sum[:], h.Sum(nil))
 	if sum == running {
@@ -624,6 +627,12 @@ func (s *devSession) buildAndLaunch(ctx context.Context, t *task, running [32]by
 		app, err := writeBundle(dc, stage, bin, icns, nil, res)
 		if err != nil {
 			return nil, sum, err
+		}
+		if len(dc.Widgets) > 0 {
+			t.set("compiling the widgets")
+			if err := addMacWidgets(dc, app, runtime.GOARCH); err != nil {
+				return nil, sum, err
+			}
 		}
 		if err := codesign(dc, app, s.sign, false); err != nil {
 			return nil, sum, err

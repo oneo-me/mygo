@@ -27,6 +27,12 @@ path, err := mygo.Dialog.Save(mygo.SaveDialogOptions{
 	DefaultPath: "notes.json",
 }) // "" when canceled
 
+// Pick photos and videos from the library.
+photos, err := mygo.Dialog.OpenPhotos(mygo.PhotoDialogOptions{
+	Kind:     mygo.PhotoImagesAndVideos,
+	Multiple: true,
+}) // copies the app owns, nil when canceled
+
 // Ask a question.
 res, err := mygo.Dialog.Message(mygo.MessageOptions{
 	Parent:        win,
@@ -46,6 +52,19 @@ mygo.Dialog.Error("Import failed", err.Error())
 and, on macOS, a message and a New Folder button. In message dialogs Enter
 activates `DefaultButton` and Escape `CancelButton`, by default the first
 button labeled Cancel or No.
+
+`OpenPhotos` shows the Photos picker on iOS, which needs no permission to
+read the library: the app gets copies of what the user picks, in the
+temporary directory, the originals as the library keeps them, or JPEG
+and H.264 with `Compatible`. `Limit` bounds how many `Multiple` picks.
+Elsewhere it is the file dialog of `Open`, showing images, videos or both.
+
+On iOS, `Open` and `Save` are the Files app's pickers. `Open` gives the
+app copies of the files picked, in its temporary directory, and the
+directories picked themselves, which it may read and write while it runs;
+`Save` moves an empty file named after `DefaultPath` where the user
+chooses, and returns its path, which the app writes. Titles, labels and
+messages do nothing there.
 
 ## Notifications
 

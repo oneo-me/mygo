@@ -96,6 +96,11 @@ so give it a background. See [configuration](../configuration.md#ios).
 - **Rotation, Dark Mode** and the text size of Settings (`TextScale`),
   which the view follows as they change; reduced motion, reduced
   transparency and darker colors too.
+- **Files and photos**: `Dialog.Open` and `Dialog.Save` are the Files
+  app's pickers, and `Dialog.OpenPhotos` the Photos picker, which needs no
+  permission to the library (see [dialogs](../native.md#dialogs)).
+- **[Widgets](../widgets.md)** on the Home Screen and the Lock Screen,
+  which the app gives their content.
 - `Dialog.Message` shows an alert; context menus show as action sheets;
   `Shell.OpenExternal` opens Safari or the app of the link; the clipboard,
   secrets (the app's Keychain), the network's status, cookies,
@@ -108,7 +113,7 @@ show pages in [web views](web-view.md) of a window of native UI instead.
 Window sizes, positions, title bars and their controls do nothing, as
 windows fill the screen; the last shown is in front, and the app closes
 windows, as the user cannot. Menus, trays, global shortcuts,
-notifications, file dialogs, file watches, flyouts placed by an anchor
+notifications, file watches, flyouts placed by an anchor
 (they fill the screen), drags of data between apps and pointer shapes have
 nothing on iOS to stand for them, or are not supported yet, and report
 so. One scene: iPads show the app in one window. `App.Quit` ends the

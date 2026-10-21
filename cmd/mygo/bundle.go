@@ -284,6 +284,11 @@ func infoPlist(c *Config, executable, icon, iconName string) []byte {
 		}
 		d["CFBundleURLTypes"] = []any{map[string]any{"CFBundleURLName": c.Identifier, "CFBundleURLSchemes": schemes}}
 	}
+	if len(c.Widgets) > 0 {
+		for k, v := range c.macWidgetsStore() {
+			d[k] = v
+		}
+	}
 	for k, v := range c.MacOS.InfoPlist {
 		d[k] = v // the app's own keys win
 	}
@@ -384,7 +389,20 @@ func codesign(c *Config, path, identity string, production bool) error {
 	if c.MacOS.Entitlements != "" {
 		entitlements = c.path(c.MacOS.Entitlements)
 	}
-	out, err := exec.Command("codesign", codesignArgs(path, identity, entitlements, production)...).CombinedOutput()
+	args := codesignArgs(path, identity, entitlements, production)
+	if appex := macWidgetsAppex(path); appex != "" {
+		work, err := os.MkdirTemp("", "mygo-sign-")
+		if err != nil {
+			return err
+		}
+		defer os.RemoveAll(work)
+		if entitlements, err = signMacWidgets(c, path, appex, identity, production, work); err != nil {
+			return err
+		}
+		args = codesignArgs(path, identity, entitlements, production)
+		args = slices.DeleteFunc(args, func(a string) bool { return a == "--deep" })
+	}
+	out, err := exec.Command("codesign", args...).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("codesign %s: %v\n%s", filepath.Base(path), err, out)
 	}

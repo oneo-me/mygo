@@ -118,6 +118,9 @@ type Backend struct {
 	OnOpenDialog func(opts *platform.OpenDialogOptions) []string
 	OnSaveDialog func(opts *platform.SaveDialogOptions) string
 	OnMessageBox func(opts *platform.MessageBoxOptions) platform.MessageBoxResult
+	// OnPhotoPicker, when set, makes the dialogs a platform.PhotoPicker,
+	// as iOS's are, which it answers. It runs on the main thread.
+	OnPhotoPicker func(opts *platform.PhotoPickerOptions) []string
 	// NotificationError, when set, is what showing a notification fails
 	// with.
 	NotificationError error
@@ -318,7 +321,12 @@ func (b *Backend) UpdateMenuItem(it *platform.MenuItem) {
 }
 
 func (b *Backend) App() platform.AppController { return app{b} }
-func (b *Backend) Dialogs() platform.Dialogs   { return dialogs{b} }
+func (b *Backend) Dialogs() platform.Dialogs {
+	if b.OnPhotoPicker != nil {
+		return photoDialogs{dialogs{b}}
+	}
+	return dialogs{b}
+}
 func (b *Backend) Clipboard() platform.Clipboard {
 	return clipboard{b}
 }
@@ -925,6 +933,13 @@ func (d dialogs) ShowMessageBox(_ platform.Window, o *platform.MessageBoxOptions
 		return
 	}
 	cb(d.b.MessageResult, nil)
+}
+
+// photoDialogs are dialogs with a picker of the user's photo library.
+type photoDialogs struct{ dialogs }
+
+func (d photoDialogs) ShowPhotoPicker(_ platform.Window, o *platform.PhotoPickerOptions, cb func([]string, error)) {
+	cb(d.b.OnPhotoPicker(o), nil)
 }
 
 type clipboard struct{ b *Backend }
