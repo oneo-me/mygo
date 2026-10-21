@@ -134,6 +134,12 @@ var (
 
 	dispatchDataCreate, dispatchRelease uintptr
 
+	// The numbers given drawables' textures (textureID), attached to them
+	// as associated objects under the address of textureKey.
+	getAssociated, setAssociated uintptr
+	textureKey                   byte
+	lastTextureID                uintptr
+
 	// Timers that trim the drawables of renderers drawing nothing for a
 	// while (see trim), by the handle in their info.
 	cfAbsoluteTimeGetCurrent      func() float64
@@ -182,6 +188,8 @@ func load() error {
 		msgSend = sym(objcLib, "objc_msgSend")
 		poolPush = sym(objcLib, "objc_autoreleasePoolPush")
 		poolPop = sym(objcLib, "objc_autoreleasePoolPop")
+		getAssociated = sym(objcLib, "objc_getAssociatedObject")
+		setAssociated = sym(objcLib, "objc_setAssociatedObject")
 		create := sym(metalLib, "MTLCreateSystemDefaultDevice")
 		name := sym(cg, "kCGColorSpaceSRGB")
 		extendedName := sym(cg, "kCGColorSpaceExtendedSRGB")
@@ -362,8 +370,11 @@ type drawState struct {
 	instBufs [ringSize]id
 	instCaps [ringSize]int
 	stops    [ringSize]texture
-	// pipes holds the pipeline of each batch built, 0 for none.
-	pipes []id
+	// pipes holds the pipeline of each batch built, 0 for none, and
+	// bounds the box around where its ops draw, for frames drawn in part
+	// (gpu.Builder.BatchBounds).
+	pipes  []id
+	bounds []gpu.Scissor
 }
 
 func (d *drawState) release() {
@@ -479,15 +490,23 @@ type Renderer struct {
 	trimTimer          uintptr
 	trimHandle         uintptr
 	trimArmed, trimmed bool
+	// drawables is how many drawables the layer keeps (paceDrawables), 0
+	// where it cannot be told; fast counts the frames in a row that
+	// followed the last at the display's rate, and fastUntil is until
+	// when the layer keeps three.
+	drawables, fast int
+	fastUntil       time.Time
 
-	// diff finds what changed since the last frame drawn, and ages what
-	// changed since each drawable was (see gpu.Ages); redrew is how much
-	// of the last frame was drawn, for FrameInfo: none of it when its
-	// scene was the last one's, part (redrewPart) or all of it.
-	diff       scene.Differ
-	ages       gpu.Ages
-	redrew     redrawn
-	redrewPart gpu.Scissor
+	// diff finds what changed since the last frame drawn, ages what
+	// changed since each drawable was (see gpu.Ages), and parts what of
+	// a frame to redraw; redrew is how much of the last frame was drawn,
+	// for FrameInfo: none of it when its scene was the last one's, parts
+	// (redrewParts) or all of it.
+	diff        scene.Differ
+	ages        gpu.Ages
+	parts       gpu.Parts
+	redrew      redrawn
+	redrewParts []gpu.Scissor
 	// pipelines has a hash of the pipelines each op draws with (see
 	// pipelineDamage).
 	pipelines gpu.Pipelines
@@ -521,13 +540,11 @@ func New(layer uintptr) (r *Renderer, err error) {
 		// Effects read their backdrops from the drawable, which their
 		// passes sample then.
 		send(ml, "setFramebufferOnly:", 0)
-		// Two drawables are too few: on a ProMotion display, frames
-		// waited for one most of each refresh. Three, as Core
-		// Animation makes while a window animates, also let both instance
-		// slots have a frame in flight while the display shows a third.
-		// They cost a frame of memory until the window idles (trim).
+		// Two drawables, and three while frames follow each other at
+		// the display's rate (paceDrawables).
 		if respondsTo(ml, "setMaximumDrawableCount:") {
-			send(ml, "setMaximumDrawableCount:", 3)
+			send(ml, "setMaximumDrawableCount:", 2)
+			r.drawables = 2
 		}
 		// The first frame shows with the window's other changes; render
 		// decides for each frame.
@@ -557,7 +574,6 @@ func newRenderer() (r *Renderer, err error) {
 	// The GPU's quads reach a pixel out of their shapes, glyphs half a
 	// pixel more, as they draw at whole pixels.
 	r.diff.Reach = 2
-	r.ages.Forget = func(tex uintptr) { release(&tex) }
 	r.b.Classes = true
 	r.b.Opaque = true // Metal's GPUs discard what opaque cores cover
 	r.formats = [2]formatState{{format: pixelFormatBGRA8Unorm}, {format: pixelFormatRGBA16Float}}
@@ -1045,7 +1061,7 @@ func (r *Renderer) encode(s *scene.Scene, target id) (id, error) {
 	if err != nil {
 		return 0, err
 	}
-	return cb, r.drawBuilt(cb, built, target, &r.drawState, nil)
+	return cb, r.drawBuilt(cb, built, target, &r.drawState, nil, false)
 }
 
 // prepare starts the command buffer of a frame of s, with its canvases,
@@ -1146,7 +1162,7 @@ func (r *Renderer) drawInto(cb id, s *scene.Scene, target id, d *drawState) erro
 	if err != nil {
 		return err
 	}
-	return r.drawBuilt(cb, built, target, d, nil)
+	return r.drawBuilt(cb, built, target, d, nil, false)
 }
 
 // build builds the instances of s with d's builder, in the format r.cur
@@ -1216,13 +1232,16 @@ func (r *Renderer) batchPipe(b gpu.Batch) id {
 }
 
 // drawBuilt encodes drawing s, built with d (build), into target, whole or,
-// unless part is nil, in part: what target holds elsewhere is kept.
-func (r *Renderer) drawBuilt(cb id, s *scene.Scene, target id, d *drawState, part *gpu.Scissor) error {
+// when partial, in parts, rectangles apart from each other: what target
+// holds elsewhere is kept. A batch draws once in each of parts it meets,
+// in the order of the batches, so that an effect reads its backdrop with
+// what is under it drawn in all of them.
+func (r *Renderer) drawBuilt(cb id, s *scene.Scene, target id, d *drawState, parts []gpu.Scissor, partial bool) error {
 	instBuf := d.instBufs[r.inUse]
 	load := uintptr(loadActionClear)
-	if part != nil {
+	if partial {
 		load = loadActionLoad
-		if !part.Empty() {
+		if len(parts) > 0 {
 			r.clearTexel(cb, s)
 		}
 	}
@@ -1236,18 +1255,18 @@ func (r *Renderer) drawBuilt(cb id, s *scene.Scene, target id, d *drawState, par
 	// changed since the last.
 	bindInstances(enc, instBuf)
 	st := passState{pipe: r.cur.pipeline, image: r.empty, scissor: noScissor}
-	if part != nil && !part.Empty() {
-		r.clearArea(enc, *part)
-		st.pipe, st.scissor = r.cur.downPipe, *part
+	if len(parts) > 0 {
+		r.clearArea(enc, parts)
+		st.pipe, st.scissor = r.cur.downPipe, parts[len(parts)-1]
 		send(enc, "setFragmentBuffer:offset:atIndex:", instBuf, 0, 0) // clearArea's bytes took its place
 	}
 	for i, b := range d.b.Batches {
 		sc := frameScissor(b.Scissor, s)
-		if part != nil {
-			sc = sc.Intersect(*part)
+		if partial {
+			sc = sc.Intersect(d.bounds[i])
 		}
 		want := d.pipes[i]
-		if b.Count == 0 || sc.Empty() || want == 0 {
+		if b.Count == 0 || sc.Empty() || want == 0 || partial && !meets(parts, sc) {
 			continue
 		}
 		if b.Backdrop != 0 {
@@ -1276,14 +1295,38 @@ func (r *Renderer) drawBuilt(cb id, s *scene.Scene, target id, d *drawState, par
 		if b.Shader != nil {
 			r.bindShader(enc, b)
 		}
-		if sc != st.scissor {
-			st.scissor = sc
-			r.setScissor(enc, sc)
+		if !partial {
+			r.drawBatch(enc, &st, sc, b.Start, b.Count)
+			continue
 		}
-		msg5(enc, selDraw, primitiveTriStrip, 0, 4, uintptr(b.Count), uintptr(b.Start))
+		for _, p := range parts {
+			if c := sc.Intersect(p); !c.Empty() {
+				r.drawBatch(enc, &st, c, b.Start, b.Count)
+			}
+		}
 	}
 	send(enc, "endEncoding")
 	return nil
+}
+
+// drawBatch encodes drawing count instances from start, a batch's, within
+// sc.
+func (r *Renderer) drawBatch(enc id, st *passState, sc gpu.Scissor, start, count int) {
+	if sc != st.scissor {
+		st.scissor = sc
+		r.setScissor(enc, sc)
+	}
+	msg5(enc, selDraw, primitiveTriStrip, 0, 4, uintptr(count), uintptr(start))
+}
+
+// meets reports whether sc meets one of parts.
+func meets(parts []gpu.Scissor, sc gpu.Scissor) bool {
+	for _, p := range parts {
+		if !sc.Intersect(p).Empty() {
+			return true
+		}
+	}
+	return false
 }
 
 // passState is what a pass bound last: its pipeline, the image (texture
@@ -1391,18 +1434,21 @@ func (r *Renderer) clearTexel(cb id, s *scene.Scene) {
 }
 
 // clearArea encodes, into the frame's pass begun with its target loaded,
-// copying the texel of r.cur.clear over area, unblended, with the pass
-// that averages squares of one texel (down), which reads it as it is:
+// copying the texel of r.cur.clear over each of parts, unblended, with the
+// pass that averages squares of one texel (down), which reads it as it is:
 // what a frame drawn whole starts with there. It leaves the pass drawing
-// with the down pass's pipeline, and the mask atlas bound again.
-func (r *Renderer) clearArea(enc id, area gpu.Scissor) {
+// with the down pass's pipeline, scissored to the last of parts, and the
+// mask atlas bound again.
+func (r *Renderer) clearArea(enc id, parts []gpu.Scissor) {
 	f := r.cur
 	p := gpu.Pass{Down: 1}
 	send(enc, "setRenderPipelineState:", f.downPipe)
 	send(enc, "setFragmentTexture:atIndex:", or(f.clear, r.empty), 0)
 	send(enc, "setFragmentBytes:length:atIndex:", uintptr(unsafe.Pointer(&p)), unsafe.Sizeof(p), 0)
-	r.setScissor(enc, area)
-	send(enc, "drawPrimitives:vertexStart:vertexCount:instanceCount:", primitiveTriStrip, 0, 4, 1)
+	for _, a := range parts {
+		r.setScissor(enc, a)
+		send(enc, "drawPrimitives:vertexStart:vertexCount:instanceCount:", primitiveTriStrip, 0, 4, 1)
+	}
 	send(enc, "setFragmentTexture:atIndex:", or(r.mask.tex, r.empty), 0)
 }
 
@@ -1669,18 +1715,22 @@ func (r *Renderer) render(s *scene.Scene) error {
 		r.track(cb)
 		return nil
 	}
+	now := timeNow()
 	if sync {
 		send(cb, "commit")
 		send(cb, "waitUntilScheduled")
 		send(drawable, "present")
+		r.paceDrawables(now)
 	} else {
 		send(cb, "presentDrawable:", drawable)
 		send(cb, "commit")
-		// The next frame's drawable, while this one is shown.
-		r.pre.start(r.layer)
+		if r.paceDrawables(now) {
+			// The next frame's drawable, while this one is shown.
+			r.pre.start(r.layer)
+		}
 	}
 	r.track(cb)
-	r.lastRender = time.Now()
+	r.lastRender = now
 	r.armTrim()
 	if r.frame%120 == 0 {
 		r.sweep()
@@ -1713,17 +1763,14 @@ func (r *Renderer) drawFrame(s *scene.Scene, damage []image.Rectangle, known boo
 		r.forgetFrames()
 		return 0, err
 	}
-	damage = r.pipelineDamage(damage, known)
-	var frame image.Rectangle
-	for _, d := range damage {
-		frame = frame.Union(d)
-	}
-	r.ages.Add(frame, !known)
+	r.ages.Add(r.pipelineDamage(damage, known), !known)
+	r.drawState.bounds = r.b.BatchBounds(r.diff.Bounds(), r.drawState.bounds[:0])
 	target := acquire()
 	if target == 0 {
 		return cb, nil
 	}
-	if err := r.drawBuilt(cb, built, target, &r.drawState, r.partOf(s, target)); err != nil {
+	parts, partial := r.partOf(s, target)
+	if err := r.drawBuilt(cb, built, target, &r.drawState, parts, partial); err != nil {
 		r.forgetFrames()
 		return 0, err
 	}
@@ -1739,33 +1786,46 @@ func (r *Renderer) pipelineDamage(damage []image.Rectangle, known bool) []image.
 	return r.pipelines.Damage(&r.b, func(i int) uint64 { return uint64(r.drawState.pipes[i]) }, &r.diff, damage, known)
 }
 
-// partOf returns the part of the frame s to draw into the drawable's
-// texture tex, or nil to draw it whole: what changed since tex was drawn
-// (r.ages), the drawables showing in turn, and the backdrops of the
-// effects that meets.
-func (r *Renderer) partOf(s *scene.Scene, tex id) *gpu.Scissor {
+// partOf returns the parts of the frame s to draw into the drawable's
+// texture tex, rectangles apart from each other, or false to draw it
+// whole: what changed since tex was drawn (r.ages), the drawables showing
+// in turn, and the backdrops of the effects that meets.
+func (r *Renderer) partOf(s *scene.Scene, tex id) ([]gpu.Scissor, bool) {
 	return r.partIn(s.Width, s.Height, tex, func(d []image.Rectangle) []image.Rectangle { return r.diff.AddBackdrops(s, d) })
 }
 
 // partIn is partOf for a frame of w×h pixels, the backdrops of whose
-// effects backdrops adds; nil draws it whole.
-func (r *Renderer) partIn(w, h int, tex id, backdrops func([]image.Rectangle) []image.Rectangle) *gpu.Scissor {
-	if !r.ages.Has(tex) {
-		// Held until forgotten, so that no other texture takes its
-		// place: Core Animation makes drawables anew as it likes.
-		send(tex, "retain")
-	}
-	since, ok := r.ages.Take(tex)
+// effects backdrops adds; false draws it whole.
+func (r *Renderer) partIn(w, h int, tex id, backdrops func([]image.Rectangle) []image.Rectangle) ([]gpu.Scissor, bool) {
+	since, ok := r.ages.Take(textureID(tex))
 	r.redrew = redrewWhole
 	if !ok || noPartial || backdrops == nil {
-		return nil
+		return nil, false
 	}
-	area, ok := gpu.Partial(since, w, h, backdrops)
+	parts, ok := r.parts.Find(since, w, h, backdrops)
 	if !ok {
-		return nil
+		return nil, false
 	}
-	r.redrew, r.redrewPart = redrewPart, area
-	return &area
+	r.redrew, r.redrewParts = redrewPart, parts
+	return parts, true
+}
+
+// textureID returns the number that tells the texture of a drawable apart
+// from every other, given it the first time and attached to it, which
+// gpu.Ages tracks drawables by: not their address, which a texture made
+// once another is gone can take, and without retaining them, which would
+// have Core Animation make a drawable in place of each one held rather
+// than reuse it (paceDrawables).
+func textureID(tex id) uintptr {
+	key := uintptr(unsafe.Pointer(&textureKey))
+	if n, _, _ := purego.SyscallN(getAssociated, uintptr(tex), key); n != 0 {
+		return n
+	}
+	lastTextureID++
+	// OBJC_ASSOCIATION_ASSIGN: a number, which the runtime neither
+	// retains nor releases.
+	purego.SyscallN(setAssociated, uintptr(tex), key, lastTextureID, 0)
+	return lastTextureID
 }
 
 // redrawn is how much of a frame was drawn.
@@ -1840,6 +1900,59 @@ func (r *Renderer) releaseTextures() {
 	r.b.Opaque = true // Release empties the builder
 }
 
+// Drawables. The layer keeps two drawables, the one shown and the one the
+// next frame draws into, and three while frames follow each other at the
+// display's rate: with two, on a ProMotion display, frames waited for one
+// most of each refresh, and a fifth of them went undrawn. Three, as Core
+// Animation makes while a window animates, also let both instance slots
+// have a frame in flight while the display shows a third. Slower frames
+// (a spinner turning 30 times a second, a caret blinking, a clock
+// ticking) leave the display time to give one back between them, and a
+// third would cost a frame of memory for nothing: Core Animation frees it
+// once the count goes down, unless something retains it (textureID).
+
+// timeNow returns the time frames are presented at; tests replace it.
+var timeNow = time.Now
+
+// fastGap is the most time between frames following each other at the
+// display's rate, and fastFrames how many such frames in a row are an
+// animation, rather than a frame and the few its change asks for (an
+// update building a list, then the rows it measured); keepFast is how
+// long the layer keeps three drawables after them, so that an animation
+// missing a refresh now and then does not make and free one each time.
+const (
+	fastGap    = 25 * time.Millisecond
+	fastFrames = 3
+	keepFast   = time.Second
+)
+
+// paceDrawables has the layer keep three drawables while frames follow
+// each other at the display's rate, and two otherwise, as a frame is
+// presented at now, and reports whether the presenter is to fetch the
+// next frame's drawable: only while they do. A frame after a pause takes
+// one that is free by then, from the main thread, in a fraction of a
+// millisecond; fetched as soon as the last was presented, when the one
+// shown and that one hold theirs, Core Animation would make a third
+// drawable, whatever its count, as it does after a frame presented with
+// the transaction.
+func (r *Renderer) paceDrawables(now time.Time) (prefetch bool) {
+	if r.fast++; now.Sub(r.lastRender) >= fastGap {
+		r.fast = 0
+	}
+	if r.fast >= fastFrames {
+		r.fastUntil = now.Add(keepFast)
+	}
+	n := 2
+	if now.Before(r.fastUntil) {
+		n = 3
+	}
+	if r.drawables != 0 && n != r.drawables {
+		send(r.layer, "setMaximumDrawableCount:", uintptr(n))
+		r.drawables = n
+	}
+	return r.fast > 0
+}
+
 // trimAfter is how long a window draws nothing before its spare drawables
 // go: about when the Metal driver frees its own memory of frames.
 const trimAfter = 2 * time.Second
@@ -1870,7 +1983,7 @@ func (r *Renderer) armTrim() {
 // trimIfIdle trims the drawables if the window drew nothing for trimAfter,
 // and waits for that time otherwise.
 func (r *Renderer) trimIfIdle() {
-	if wait := trimAfter - time.Since(r.lastRender); wait > 0 {
+	if wait := trimAfter - timeNow().Sub(r.lastRender); wait > 0 {
 		cfRunLoopTimerSetNextFireDate(r.trimTimer, cfAbsoluteTimeGetCurrent()+wait.Seconds())
 		return
 	}
@@ -1985,8 +2098,14 @@ func (r *Renderer) FrameInfo() string {
 	info := r.b.Summary()
 	switch r.redrew {
 	case redrewPart:
-		a := r.redrewPart
-		info = fmt.Sprintf("redrew %d×%d at %d,%d, %s", a.Right-a.Left, a.Bottom-a.Top, a.Left, a.Top, info)
+		parts := []string{"nothing"}
+		for i, a := range r.redrewParts {
+			if i == 0 {
+				parts = parts[:0]
+			}
+			parts = append(parts, fmt.Sprintf("%d×%d at %d,%d", a.Right-a.Left, a.Bottom-a.Top, a.Left, a.Top))
+		}
+		info = fmt.Sprintf("redrew %s, %s", strings.Join(parts, " and "), info)
 	case redrewNothing:
 		info = "unchanged"
 	}

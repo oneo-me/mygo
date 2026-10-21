@@ -262,11 +262,15 @@ func (s *System) Glyph(f *Font, id uint32, scale, x float32, shade Shade, opaque
 // the pixel x is in.
 func (s *System) place(f *Font, scale float32, subpixel bool, x float32) (q, n int, carry float32) {
 	pk := placeKey{f, uint32(scale*256 + 0.5), subpixel}
-	pl, ok := s.places[pk]
-	if !ok {
-		pl.n, pl.round = s.engine().positions(f, scale, subpixel)
-		pl.n = max(pl.n, 1)
-		s.places[pk] = pl
+	pl := s.lastPlace
+	if pk != s.lastPlaceKey || pk.font == nil {
+		var ok bool
+		if pl, ok = s.places[pk]; !ok {
+			pl.n, pl.round = s.engine().positions(f, scale, subpixel)
+			pl.n = max(pl.n, 1)
+			s.places[pk] = pl
+		}
+		s.lastPlaceKey, s.lastPlace = pk, pl
 	}
 	frac := float64(x) - math.Floor(float64(x))
 	if pl.round {
@@ -276,6 +280,13 @@ func (s *System) place(f *Font, scale float32, subpixel bool, x float32) (q, n i
 		return q, pl.n, 0
 	}
 	return min(int(frac*float64(pl.n)), pl.n-1), pl.n, 0
+}
+
+// forgetPlaces forgets how glyphs are placed, as the fonts or how they are
+// drawn change.
+func (s *System) forgetPlaces() {
+	clear(s.places)
+	s.lastPlaceKey = placeKey{}
 }
 
 // Baseline returns where the system's text stack draws a baseline that is

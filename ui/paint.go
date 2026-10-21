@@ -733,21 +733,25 @@ func (p *Painter) textForeground(l *text.Layout, x, y float32, color Color, ts t
 	deco := decoration{underline: ts.underline, wavy: ts.wavy, strike: ts.strike, color: ts.decoColor, thick: ts.decoThick}
 	shade := text.ShadeOf(color.R, color.G, color.B)
 	start := int32(len(p.s.Glyphs))
+	// Whether spans of the text move its glyphs, and their transforms,
+	// the same for each glyph of an element: found once.
+	inline := p.inlineTransforms()
+	transforms := glyphTransforms{p: p}
 	var run *glyphRun
-	if sys.JoinsGlyphs() && !p.inlineTransforms() {
+	if sys.JoinsGlyphs() && !inline {
 		// The engine's, whose buffers each text reuses.
 		run = &p.rt.glyphRun
 		run.ids, run.pens, run.glyphs = run.ids[:0], run.pens[:0], run.glyphs[:0]
 	}
 	for li := range l.Lines {
 		line := &l.Lines[li]
-		if !p.transform.Set && !p.inlineTransforms() && (y+line.Y > p.clip.Y+p.clip.H || y+line.Y+line.Height < p.clip.Y) {
+		if !p.transform.Set && !inline && (y+line.Y > p.clip.Y+p.clip.H || y+line.Y+line.Height < p.clip.Y) {
 			continue
 		}
 		baseline := sys.Baseline((y + line.Baseline) * s)
 		for _, g := range line.Glyphs {
 			pen := (x + g.X) * s
-			if g.Object || !p.transform.Set && !p.inlineTransforms() && (pen > (p.clip.X+p.clip.W)*s || pen+(g.Advance+g.Size)*s < p.clip.X*s) {
+			if g.Object || !p.transform.Set && !inline && (pen > (p.clip.X+p.clip.W)*s || pen+(g.Advance+g.Size)*s < p.clip.X*s) {
 				continue
 			}
 			ix := float32(math.Floor(float64(pen)))
@@ -757,7 +761,7 @@ func (p *Painter) textForeground(l *text.Layout, x, y float32, color Color, ts t
 					glyphShade = text.ShadeOf(glyphColor.R, glyphColor.G, glyphColor.B)
 				}
 			}
-			gi := sys.Glyph(g.Font, g.ID, s, pen, glyphShade, p.opaque && !p.inlineTransforms())
+			gi := sys.Glyph(g.Font, g.ID, s, pen, glyphShade, p.opaque && !inline)
 			if !gi.OK {
 				continue
 			}
@@ -765,7 +769,7 @@ func (p *Painter) textForeground(l *text.Layout, x, y float32, color Color, ts t
 			sg := scene.Glyph{
 				X: ix + gi.Left, Y: baseline + gi.Top, W: float32(gi.W), H: float32(gi.H),
 				U: gi.X, V: gi.Y, UW: gi.W, VH: gi.H,
-				Transform: p.inlineTransform(g.Cluster).Pixels(s),
+				Transform: transforms.at(g.Cluster),
 				Color:     glyphColor.scene(), Wide: p.glyphWide(glyphColor), Colored: gi.Colored, Subpixel: gi.Subpixel, Thin: gi.Thin,
 			}
 			if run != nil {

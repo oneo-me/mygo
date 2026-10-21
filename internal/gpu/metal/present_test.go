@@ -4,6 +4,7 @@ package metal
 
 import (
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/internal/scene"
 	"github.com/egoist/mygo/internal/wait"
@@ -120,7 +121,20 @@ func TestPrefetchedFrames(t *testing.T) {
 	if fetched != 5 {
 		t.Errorf("%d fetches after 6 frames, want 5", fetched)
 	}
-	frame(96, 6)
+	// A frame after a pause takes the drawable fetched for it, and has
+	// none fetched for the next, which takes one that is free by then;
+	// the next, following it at once, has one fetched again.
+	r.lastRender = r.lastRender.Add(-time.Second)
+	pool(func() { r.pre.drain() })
+	frame(64, 6)
+	if r.pre.drawable != 0 || fetched != 5 {
+		t.Errorf("a frame after a pause: drawable fetched %#x, %d fetches, want none and 5", r.pre.drawable, fetched)
+	}
+	frame(64, 7)
+	if r.pre.drawable == 0 || fetched != 6 {
+		t.Errorf("a frame following another: drawable fetched %#x, %d fetches, want one and 6", r.pre.drawable, fetched)
+	}
+	frame(96, 8)
 	if r.pre.drawable != 0 || !r.synced {
 		t.Errorf("a resize: drawable fetched %#x, synced %v", r.pre.drawable, r.synced)
 	}

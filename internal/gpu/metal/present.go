@@ -6,7 +6,6 @@ import (
 	"image"
 	"runtime"
 	"sync"
-	"time"
 
 	"github.com/ebitengine/purego"
 
@@ -208,12 +207,8 @@ func (r *Renderer) stash(s *scene.Scene, damage []image.Rectangle, known bool) e
 		r.forgetFrames()
 		return err
 	}
-	damage = r.pipelineDamage(damage, known)
-	var frame image.Rectangle
-	for _, d := range damage {
-		frame = frame.Union(d)
-	}
-	r.ages.Add(frame, !known)
+	r.ages.Add(r.pipelineDamage(damage, known), !known)
+	r.drawState.bounds = r.b.BatchBounds(r.diff.Bounds(), r.drawState.bounds[:0])
 	r.pending = pendingFrame{cb: send(cb, "retain"), whole: len(s.Effects) > 0}
 	r.pending.size.Width, r.pending.size.Height, r.pending.size.Clear = s.Width, s.Height, s.Clear
 	r.diff.Remember(s)
@@ -246,19 +241,21 @@ func (r *Renderer) finishPending(prefetch bool) error {
 	if p.whole {
 		backdrops = nil
 	}
-	if err := r.drawBuilt(p.cb, &p.size, tex, &r.drawState, r.partIn(p.size.Width, p.size.Height, tex, backdrops)); err != nil {
+	parts, partial := r.partIn(p.size.Width, p.size.Height, tex, backdrops)
+	if err := r.drawBuilt(p.cb, &p.size, tex, &r.drawState, parts, partial); err != nil {
 		r.forgetFrames()
 		release(&p.cb)
 		return err
 	}
 	send(p.cb, "presentDrawable:", drawable)
 	send(p.cb, "commit")
-	if prefetch {
+	now := timeNow()
+	if r.paceDrawables(now) && prefetch {
 		r.pre.start(r.layer)
 	}
 	r.track(p.cb)
 	release(&p.cb)
-	r.lastRender = time.Now()
+	r.lastRender = now
 	r.armTrim()
 	return nil
 }

@@ -390,21 +390,53 @@ func (p *Painter) inlineTransform(runeIndex int) scene.Affine {
 	if p.inline == nil {
 		return scene.Affine{}
 	}
-	var find func(e *node, offset int) *node
-	find = func(e *node, offset int) *node {
-		for ch := e.first; ch != nil; ch = ch.next {
-			if runeIndex >= offset+ch.runes[0] && runeIndex < offset+ch.runes[1] {
-				return find(ch, offset+ch.runes[0])
-			}
+	return p.inlineTransformOf(p.inlineNode(runeIndex))
+}
+
+// inlineNode returns the element of the inline text painted that holds
+// rune runeIndex of it: the text's own, or one of its spans.
+func (p *Painter) inlineNode(runeIndex int) *node {
+	e, offset := p.inline, 0
+	for ch := e.first; ch != nil; {
+		if runeIndex >= offset+ch.runes[0] && runeIndex < offset+ch.runes[1] {
+			e, offset = ch, offset+ch.runes[0]
+			ch = e.first
+			continue
 		}
-		return e
+		ch = ch.next
 	}
-	e := find(p.inline, 0)
+	return e
+}
+
+// inlineTransformOf returns the transform of e, in the inline text painted,
+// relative to that text.
+func (p *Painter) inlineTransformOf(e *node) scene.Affine {
 	inv, ok := p.inline.world.Inverse()
 	if !ok {
 		return scene.Scaling(0, 0)
 	}
 	return inv.Mul(e.world)
+}
+
+// glyphTransforms gives the transforms of the glyphs of the inline text
+// painted, in pixels (inlineTransform), as textForeground paints them one
+// after another: that of the element each is in, found again only for a
+// glyph in another.
+type glyphTransforms struct {
+	p    *Painter
+	last *node
+	m    scene.Affine
+}
+
+func (t *glyphTransforms) at(runeIndex int) scene.Affine {
+	p := t.p
+	if p.inline == nil {
+		return scene.Affine{}
+	}
+	if e := p.inlineNode(runeIndex); e != t.last {
+		t.last, t.m = e, p.inlineTransformOf(e).Pixels(p.scale)
+	}
+	return t.m
 }
 
 // Inline glyphs can move into view even when their paragraph's layout box

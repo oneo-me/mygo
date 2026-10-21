@@ -37,6 +37,14 @@ func init() {
 	// make the pipelines they need first (TestFramesNeverWaitForACompile
 	// tests the other way).
 	syncPipelines = true
+	// Frames follow each other at the display's rate, a refresh apart,
+	// however long each takes to draw here: the presenter fetches the
+	// drawable of each next one (paceDrawables).
+	clock := time.Now()
+	timeNow = func() time.Time {
+		clock = clock.Add(time.Second / 60)
+		return clock
+	}
 }
 
 func TestDrawsAsTheCPURenderer(t *testing.T) {
@@ -149,8 +157,8 @@ func TestTrimDrawables(t *testing.T) {
 	defer r.Release()
 	pool(func() {
 		r.fit(800, 600, 1)
-		if n := send(r.layer, "maximumDrawableCount"); n != 3 {
-			t.Errorf("drawable count = %d, want 3", n)
+		if n := send(r.layer, "maximumDrawableCount"); n != 2 {
+			t.Errorf("drawable count = %d, want 2", n)
 		}
 		r.trim()
 		if !r.trimmed {
@@ -161,6 +169,67 @@ func TestTrimDrawables(t *testing.T) {
 			t.Error("next frame did not restore the drawables")
 		}
 	})
+}
+
+// TestPaceDrawables checks that the layer keeps three drawables while
+// frames follow each other at the display's rate, for a while after, and
+// two otherwise: frames at 30 a second (a spinner), and frames in twos
+// and threes after a pause (an update, and the frames it asks for).
+func TestPaceDrawables(t *testing.T) {
+	if err := load(); err != nil {
+		t.Skip("no Metal:", err)
+	}
+	var layer id
+	pool(func() { layer = send(class("CALayer"), "new") })
+	if layer == 0 {
+		t.Skip("no Core Animation")
+	}
+	defer pool(func() { release(&layer) })
+	r, err := New(uintptr(layer))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Release()
+	if r.drawables == 0 {
+		t.Skip("the layer's drawable count cannot be set")
+	}
+	start := time.Now()
+	at := time.Duration(0)
+	present := func(gap time.Duration) int {
+		at += gap
+		var n id
+		pool(func() {
+			r.paceDrawables(start.Add(at))
+			r.lastRender = start.Add(at)
+			n = send(r.layer, "maximumDrawableCount")
+		})
+		if int(n) != r.drawables {
+			t.Fatalf("the layer keeps %d drawables, the renderer thinks %d", n, r.drawables)
+		}
+		return int(n)
+	}
+	var got []int
+	// Frames in threes, a second apart.
+	for range 3 {
+		got = append(got, present(time.Second), present(16*time.Millisecond), present(16*time.Millisecond))
+	}
+	// At 30 a second.
+	for range 3 {
+		got = append(got, present(33*time.Millisecond))
+	}
+	// At 60 a second; then at 30 again, which keeps three for keepFast.
+	for range 4 {
+		got = append(got, present(16*time.Millisecond))
+	}
+	for end := at + 1500*time.Millisecond; at < end; {
+		if n := present(33 * time.Millisecond); n != got[len(got)-1] {
+			got = append(got, n)
+		}
+	}
+	want := []int{2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 2}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("drawables %v, want %v", got, want)
+	}
 }
 
 // TestChangedSince checks what frames drawn in memory copy into the

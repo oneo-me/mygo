@@ -3638,10 +3638,15 @@ either.
     them (`presentDrawable:`), sparing a pass of AppKit's display cycle
     and a commit of the transaction each: an animation at 120 Hz takes
     about half the main thread's time it would. The main thread never
-    waits for the display: after each frame presented as soon as drawn, a
-    goroutine on a thread of its own (`present.go`) takes the next frame's
-    drawable, which `nextDrawable` holds back while the display holds the
-    others, most of a refresh at times. A frame that comes while it does
+    waits for the display: after each frame presented as soon as drawn
+    that followed the last at the display's rate, a goroutine on a thread
+    of its own (`present.go`) takes the next frame's drawable, which
+    `nextDrawable` holds back while the display holds the others, most of
+    a refresh at times. A frame after a pause takes its own on the main
+    thread, from those free by then, in a fraction of a millisecond:
+    fetched as soon as the last frame was presented, while the one shown
+    and that one hold theirs, Core Animation would make a third drawable,
+    whatever the layer's count (see below). A frame that comes while it does
     is built at once, its canvases and instances ready, and waits
     (`pendingFrame`); once the goroutine has the drawable, it has the
     main thread (`SetPost`, through `surface.Conn.Post`) draw the frame
@@ -3660,10 +3665,19 @@ either.
     the main target and each canvas, and a slot waits only for the command
     buffer that last used it. Updating an atlas or image texture in place
     still waits for every frame in flight. Rendering a canvas into its
-    texture stays ordered on the command queue. The layer keeps three
-    drawables, as Core Animation makes while a window animates: with two,
-    on a ProMotion display, frames waited for one most of each refresh,
-    and a fifth of the frames went undrawn. The third costs a frame of memory while a window animates.
+    texture stays ordered on the command queue. The layer keeps two
+    drawables, the one shown and the one the next frame draws into, and
+    three while frames follow each other at the display's rate, from the
+    fourth in a row less than 25 ms apart until a second after the last
+    (`paceDrawables`), as Core Animation makes while a window animates:
+    with two, on a ProMotion display, frames waited for one most of each
+    refresh, and a fifth of the frames went undrawn. Slower frames (a
+    spinner turning 30 times a second, a caret blinking, a clock ticking,
+    an update and the few frames it asks for) leave the display time to
+    give one back, and a third would cost a frame of memory for nothing,
+    14 MB for a window of 1200×800 DIPs at scale 2. Core Animation frees
+    it once the count goes down, unless something retains its texture:
+    it then makes another drawable in place of each one held.
     Waiting for a drawable remains separate from waiting for an instance
     buffer, so offscreen encode timings do not establish presentation latency.
     Opaque fill cores use an unblended pipeline in BGRA8; float16 keeps
@@ -3688,16 +3702,29 @@ either.
     for their backdrops.
     A frame draws only what changed since its drawable was drawn. Core
     Animation hands the layer's drawables out in turn, and each holds the
-    frame drawn into it last: the renderer keeps, by the drawable's
-    texture (retained, so that no other takes its address), what changed
-    in the frames since (`gpu.Ages`, as EGL's buffer age says), found by
-    comparing each scene with the last (`scene.Differ`, as the CPU
-    renderer does), grows it by the backdrops of the effects it meets,
-    and, while that is less than half the frame, loads the drawable
-    rather than clearing it, copies a texel cleared to the frame's color
-    over the area (with the `down` pass, so that the GPU converts the
-    color as it does clearing), and draws the batches scissored to it,
-    leaving out those outside. Apple's tile-based GPUs then load and store
+    frame drawn into it last: the renderer keeps, by a number it attaches
+    to the drawable's texture as an associated object (`textureID`: not
+    the texture's address, which one made once another is gone can take,
+    and without retaining it), what changed in the frames since
+    (`gpu.Ages`, as EGL's buffer age says), found by comparing each scene
+    with the last (`scene.Differ`, as the CPU renderer does): up to eight
+    rectangles apart from each other, those that overlap, or whose union
+    adds fewer than 64×64 pixels, joined (`gpu.Parts`), so that a spinner
+    in a sidebar and a line of text shimmering at the bottom of a window
+    redraw themselves rather than the window between them. It grows them
+    by the backdrops of the effects they meet and, while they are less
+    than half the frame, loads the drawable rather than clearing it,
+    copies a texel cleared to the frame's color over each (with the
+    `down` pass, so that the GPU converts the color as it does clearing),
+    and draws each batch, in their order, scissored to each rectangle that
+    the box around its ops' bounds meets (`gpu.Builder.BatchBounds`),
+    leaving out the others: a batch's scissor is its clip, which can hold
+    a page of text, and an effect away from what changed reads no
+    backdrop. In a window of 1200×800 DIPs with a bar moving in its
+    sidebar and a line shimmering under a list blurred at its top, both
+    30 times a second, the GPU's time fell from about 4% of an M1 Max's
+    to under 2% (OpenGL and Direct3D still redraw one rectangle around
+    what changed, `gpu.Partial`). Apple's tile-based GPUs then load and store
     only the tiles the pass draws in: a caret blinking in a window of
     3200×2000 pixels takes 0.4 ms of the GPU a frame rather than 2.4,
     and a spinner 0.4 rather than 2.9, on an M5. Copying the last frame
@@ -3715,7 +3742,8 @@ either.
     holding an op drawn under a transform, which it then cuts with a mask
     (`scene.Differ`); `TestPartialFramesMatchWhole` draws random scenes
     changing frame after frame into three targets in turn and compares
-    each frame with it drawn whole. Colors
+    each frame with it drawn whole, and `TestPartialFramesApartMatchWhole`
+    does so with changes far apart, an effect among them. Colors
     outside the sRGB gamut (`ui.Oklch`, as CSS's `oklch()`) are in a
     table of the scene (`scene.Scene.Wide`), which ops and glyphs point
     into with a 16-bit index (`Op.Wide`, in room the op's other fields
