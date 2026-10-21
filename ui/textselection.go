@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"runtime"
 	"strings"
 )
 
@@ -452,7 +451,7 @@ func (rt *engine) textSelectionKey(s *state, k keyEvent) bool {
 	s = rt.states[t.caret.id]
 	ed, at := s.editor, t.caret.at
 	mods := k.mods &^ Shift
-	if (runtime.GOOS == "darwin" && mods == Cmd && (k.key == KeyUp || k.key == KeyDown)) ||
+	if (apple && mods == Cmd && (k.key == KeyUp || k.key == KeyDown)) ||
 		(mods == Ctrl && (k.key == KeyHome || k.key == KeyEnd)) {
 		direction := 1
 		if k.key == KeyUp || k.key == KeyHome {
@@ -498,7 +497,7 @@ func (rt *engine) textSelectionKey(s *state, k keyEvent) bool {
 		return true
 	}
 	t.hasDesired = false
-	if (k.key == KeyLeft && at == 0 || k.key == KeyRight && at == ed.buf.n) && !(runtime.GOOS == "darwin" && mods == Cmd) {
+	if (k.key == KeyLeft && at == 0 || k.key == KeyRight && at == ed.buf.n) && !(apple && mods == Cmd) {
 		direction := 1
 		if k.key == KeyLeft {
 			direction = -1

@@ -52,8 +52,14 @@ update-<platform>.json: publish them where updates point to.
 
 The platform web (or js/wasm) builds an app of native UI for browsers into
 <out>/web: index.html, which loads the app, Go's wasm_exec.js and the app's
-WebAssembly, named by its content: a static site, to serve from anywhere.`)
-	platforms := flags.String("platform", runtime.GOOS+"/"+runtime.GOARCH, "comma separated GOOS/GOARCH targets, e.g. darwin/universal,linux/amd64,windows/amd64, or web for browsers")
+WebAssembly, named by its content: a static site, to serve from anywhere.
+
+The platform ios builds an app of native UI for iPhones and iPads into
+<out>/ios-arm64: the .app, signed with ios.signingIdentity and
+ios.provisioningProfile, and "<name> <version>.ipa"; ios-simulator builds
+it for the simulator into <out>/ios-simulator-<arch>. They need a Mac with
+Xcode, whose clang links the app.`)
+	platforms := flags.String("platform", runtime.GOOS+"/"+runtime.GOARCH, "comma separated GOOS/GOARCH targets, e.g. darwin/universal,linux/amd64,windows/amd64, web for browsers, or ios and ios-simulator")
 	debug := flags.Bool("debug", false, "keep development features such as the web inspector")
 	skipBuildCommand := flags.Bool("skip-build-command", false, "do not run buildCommand")
 	skipDMG := flags.Bool("skip-dmg", false, "do not create a disk image for macOS")
@@ -137,6 +143,14 @@ WebAssembly, named by its content: a static site, to serve from anywhere.`)
 	for _, p := range splitList(*platforms) {
 		if isWebPlatform(p) {
 			paths, err := buildWeb(c, opts)
+			built = append(built, paths...)
+			if err != nil {
+				return err
+			}
+			continue
+		}
+		if t, ok := parseIOSPlatform(p); ok {
+			paths, err := buildIOS(c, t, opts)
 			built = append(built, paths...)
 			if err != nil {
 				return err

@@ -122,6 +122,19 @@ Signed [auto-updates](updates.md). `publicKey` and one of `github` and
 
 See [macOS](distribution.md#macos).
 
+## ios
+
+| Field | Default | |
+|---|---|---|
+| `minimumOSVersion` | `15.0` | the oldest iOS the app runs on |
+| `signingIdentity` | | the identity that signs the app for devices, e.g. `Apple Development: Jane Doe (TEAMID)`; without it, builds for devices are left unsigned, and builds for the simulator are signed ad hoc |
+| `provisioningProfile` | | the `.mobileprovision` embedded in the app for devices, which must allow its identifier, devices and signing identity |
+| `entitlements` | the profile's | a property list of entitlements to sign the app for devices with |
+| `infoPlist` | | keys added to the app's `Info.plist`, replacing MyGo's, e.g. `NSCameraUsageDescription` |
+| `simulator` | the one booted, else the first iPhone | the simulator `mygo dev -ios` runs the app in, by name or UDID |
+
+See [iOS](distribution.md#ios).
+
 ## windows
 
 | Field | Default | |

@@ -38,7 +38,8 @@ memory and CPU use.
   editing with input methods, virtualized lists, SVG icons, animations,
   screen reader support, and views you test without a window; Liquid Glass
   on every platform with the glass plugin; web pages inside native UI, under
-  the menus and dialogs it shows over them.
+  the menus and dialogs it shows over them; the same app in browsers and on
+  iPhones and iPads.
 - **Desktop APIs** for both: windows, menus, tray, dialogs, notifications,
   global shortcuts, deep links, file associations, recent documents, the
   system accent color and accessibility settings, watching files, and more.

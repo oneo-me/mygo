@@ -34,9 +34,9 @@ const bundleIconName = "AppIcon"
 const bundleCatalog = "Assets.car"
 
 // Platform directories are named after a system MyGo builds apps for,
-// alone or with an architecture: darwin, linux-arm64, windows-amd64.
+// alone or with an architecture: darwin, ios, linux-arm64, windows-amd64.
 var (
-	platformOS   = []string{"darwin", "linux", "windows"}
+	platformOS   = []string{"darwin", "ios", "linux", "windows"}
 	platformArch = []string{"386", "amd64", "arm", "arm64", "loong64", "mips", "mips64", "mips64le", "mipsle", "ppc64", "ppc64le", "riscv64", "s390x"}
 )
 

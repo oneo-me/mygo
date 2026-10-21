@@ -1,8 +1,6 @@
 package ui
 
-import (
-	"runtime"
-)
+import ()
 
 // checkGroup is a CheckboxGroup being built: the values of its check boxes.
 type checkGroup struct {
@@ -251,7 +249,7 @@ func coreFindBar(c *context, open *bool, query *string, matches int, current *in
 		}
 	}
 	bar.afterInput(func() {
-		mac := runtime.GOOS == "darwin"
+		mac := apple
 		switch {
 		case mac && c.Shortcut(Cmd, KeyG), !mac && c.Shortcut(0, KeyF3):
 			step(1)

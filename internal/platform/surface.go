@@ -112,6 +112,16 @@ type MaximizeButtonSurface interface {
 	SetMaximizeButton(r RectF)
 }
 
+// InsetSurface is a Surface part of which the system covers, or keeps
+// for itself, as a phone's status bar, its sensor housing, the home
+// indicator and the software keyboard do (iOS).
+type InsetSurface interface {
+	// SafeArea returns how far from each edge of the surface its content
+	// lays itself out, in DIPs, while its background still fills the
+	// whole surface. A change comes as a SurfaceResize.
+	SafeArea() (top, right, bottom, left float64)
+}
+
 // IdleSurface is a Surface that can give back memory once frames stop.
 type IdleSurface interface {
 	// Idle tells that no frame came for a while: the surface may give
@@ -253,6 +263,9 @@ const (
 	// the surface has the keyboard again, and the content moves the focus
 	// on from the web view's element.
 	WebViewTabOut
+	// PointerCancel ends the press of Button at X, Y as the system took
+	// it, as for a gesture of its own: no click, unlike PointerUp.
+	PointerCancel
 )
 
 // SurfaceEvent is input on a Surface, or a change of it.
@@ -269,6 +282,10 @@ type SurfaceEvent struct {
 	Precise bool
 	// Scale is PointerZoom's.
 	Scale float64
+	// Touch marks pointer events of a finger on a touch screen (iOS),
+	// which hovers nothing: a finger moving before what it pressed takes
+	// the drag scrolls the content under it instead (package ui).
+	Touch bool
 	Key   Key
 	// PhysicalKey is the key by its position on an ANSI US keyboard,
 	// whatever the active layout types; KeyUnknown where the backend does

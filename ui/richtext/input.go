@@ -10,6 +10,10 @@ import (
 
 const scrollbarWidth = 10
 
+// apple tells that the app runs on macOS or iOS, whose keys move and
+// delete as AppKit's text views do.
+const apple = runtime.GOOS == "darwin" || runtime.GOOS == "ios"
+
 // input takes the editor's input as it comes: keys, text, edit commands,
 // the pointer and the wheel.
 func (v *view) input(ev ui.InputEvent) bool {
@@ -194,7 +198,7 @@ func (v *view) key(key ui.Key, mods ui.Modifiers) bool {
 	if cmd, ok := shortcut(key, mods); ok {
 		return v.run(cmd)
 	}
-	mac := runtime.GOOS == "darwin"
+	mac := apple
 	shift := mods&ui.Shift != 0
 	m := mods &^ ui.Shift
 	if mac && m == ui.Ctrl {
@@ -413,7 +417,7 @@ func (v *view) key(key ui.Key, mods ui.Modifiers) bool {
 // Notes and Google Docs have them, with Control in place of Command
 // elsewhere, where Ctrl+L, Ctrl+E, Ctrl+R align, as in Word.
 func shortcut(key ui.Key, mods ui.Modifiers) (string, bool) {
-	mac := runtime.GOOS == "darwin"
+	mac := apple
 	switch mods {
 	case ui.Cmd:
 		switch key {

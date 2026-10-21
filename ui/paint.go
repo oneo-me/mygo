@@ -2,7 +2,6 @@ package ui
 
 import (
 	"math"
-	"runtime"
 	"slices"
 	"time"
 
@@ -42,10 +41,10 @@ type opaqueBox struct {
 	holes int
 }
 
-// continuousCorners curves rounded corners as Apple does, on macOS, where
-// AppKit's and SwiftUI's controls have them (scene.Op.Continuous): circular
-// elsewhere, as Windows and GTK draw them.
-const continuousCorners = runtime.GOOS == "darwin"
+// continuousCorners curves rounded corners as Apple does, on macOS and iOS,
+// where UIKit's, AppKit's and SwiftUI's controls have them
+// (scene.Op.Continuous): circular elsewhere, as Windows and GTK draw them.
+const continuousCorners = apple
 
 func (rt *engine) paint(root *node, w, h, scale float32) {
 	rt.paints++

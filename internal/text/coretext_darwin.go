@@ -25,7 +25,12 @@ import (
 // to others for what a font lacks, shapes, and suggests line breaks, and
 // Core Graphics rasterizes glyphs, in color for color fonts such as Apple
 // Color Emoji, and the others with font smoothing, as AppKit draws text.
-// The system font comes from NSFont, which knows its weights.
+// The system font comes from NSFont, which knows its weights. On iOS,
+// which smooths no fonts, it comes from UIFont, which knows them too.
+
+// mobile tells that the engine runs on iOS: UIKit and UIFont stand for
+// AppKit and NSFont.
+const mobile = runtime.GOOS == "ios"
 
 func newEngine() engine {
 	e, err := newCoreText()
@@ -210,7 +215,11 @@ func loadCoreText() error {
 	text := lib("/System/Library/Frameworks/CoreText.framework/CoreText")
 	cg := lib("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
 	objcLib := lib("/usr/lib/libobjc.A.dylib")
-	lib("/System/Library/Frameworks/AppKit.framework/AppKit") // NSFont
+	if mobile {
+		lib("/System/Library/Frameworks/UIKit.framework/UIKit") // UIFont
+	} else {
+		lib("/System/Library/Frameworks/AppKit.framework/AppKit") // NSFont
+	}
 	if len(missing) > 0 {
 		return fmt.Errorf("cannot load %s", strings.Join(missing, ", "))
 	}
@@ -480,8 +489,11 @@ func newCoreText() (*coreText, error) {
 
 // fontSmoothing reports whether the user leaves font smoothing on: AppKit
 // turns it off when AppleFontSmoothing is 0, or not a number, which Core
-// Graphics' bitmap contexts do not heed.
+// Graphics' bitmap contexts do not heed. iOS never smooths fonts.
 func fontSmoothing() bool {
+	if mobile {
+		return false
+	}
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	pool := ct.poolPush()
@@ -558,7 +570,11 @@ func (e *coreText) systemFont(size float32, weight int, italic, mono bool) uintp
 		sel = "monospacedSystemFontOfSize:weight:"
 	}
 	var font uintptr
-	if cls := objc.ID(objc.GetClass("NSFont")); cls != 0 && objc.Send[bool](cls, objc.RegisterName("respondsToSelector:"), objc.RegisterName(sel)) {
+	fontClass := "NSFont" // toll-free bridged with CTFont, as UIFont is
+	if mobile {
+		fontClass = "UIFont"
+	}
+	if cls := objc.ID(objc.GetClass(fontClass)); cls != 0 && objc.Send[bool](cls, objc.RegisterName("respondsToSelector:"), objc.RegisterName(sel)) {
 		if font = uintptr(cls.Send(objc.RegisterName(sel), float64(size), nsWeight(weight))); font != 0 {
 			ct.retain(font)
 		}

@@ -103,6 +103,12 @@ const (
 	layerHeightSizable     = 1 << 4
 )
 
+// mobile tells that the renderer draws on iOS, whose GPUs share their
+// memory with the CPU: textures take no managed storage, which iOS lacks,
+// and have none to synchronize; and layers do not resize with their
+// superlayer, which fit follows.
+const mobile = runtime.GOOS == "ios"
+
 var (
 	loadOnce sync.Once
 	errLoad  error
@@ -506,7 +512,7 @@ func New(layer uintptr) (r *Renderer, err error) {
 		}
 		ml := send(send(class("CAMetalLayer"), "alloc"), "init")
 		if err = need(ml, "CAMetalLayer", "setDevice:", "setPixelFormat:", "setFramebufferOnly:", "setPresentsWithTransaction:",
-			"setColorspace:", "setDrawableSize:", "setContentsScale:", "setFrame:", "setAutoresizingMask:", "nextDrawable"); err != nil {
+			"setColorspace:", "setDrawableSize:", "setContentsScale:", "setFrame:", "nextDrawable"); err != nil {
 			release(&ml)
 			return
 		}
@@ -529,7 +535,9 @@ func New(layer uintptr) (r *Renderer, err error) {
 		r.synced = true
 		send(ml, "setColorspace:", srgb)
 		send(ml, "setOpaque:", 0)
-		send(ml, "setAutoresizingMask:", layerWidthSizable|layerHeightSizable)
+		if !mobile {
+			send(ml, "setAutoresizingMask:", layerWidthSizable|layerHeightSizable)
+		}
 		send(layer, "addSublayer:", ml)
 		r.layer, r.superlayer = ml, layer
 	})
@@ -890,9 +898,10 @@ func (r *Renderer) compiledLibrary() id {
 }
 
 // libraryFromData returns a library loaded from the code of one, or 0
-// when Metal cannot load it.
+// when Metal cannot load it. Libraries compiled ahead of time are macOS's,
+// whose functions iOS loads but refuses: there the source compiles.
 func (r *Renderer) libraryFromData(code []byte) id {
-	if dispatchDataCreate == 0 || !respondsTo(r.device, "newLibraryWithData:error:") {
+	if mobile || dispatchDataCreate == 0 || !respondsTo(r.device, "newLibraryWithData:error:") {
 		return 0
 	}
 	// Without a destructor, dispatch_data_create copies the bytes.
@@ -917,7 +926,7 @@ func (r *Renderer) newTexture(w, h int, format, usage uint, pix []byte, stride i
 		return 0
 	}
 	send(desc, "setUsage:", uintptr(usage))
-	if usage&usageRenderTarget != 0 {
+	if usage&usageRenderTarget != 0 && !mobile {
 		send(desc, "setStorageMode:", storageManaged)
 	}
 	tex := send(r.device, "newTextureWithDescriptor:", desc)
@@ -1909,9 +1918,11 @@ func (r *Renderer) renderOffscreen(s *scene.Scene) (pix []byte, err error) {
 		if cb, err = r.encode(s, tex); err != nil {
 			return
 		}
-		blit := send(cb, "blitCommandEncoder")
-		send(blit, "synchronizeResource:", tex)
-		send(blit, "endEncoding")
+		if !mobile {
+			blit := send(cb, "blitCommandEncoder")
+			send(blit, "synchronizeResource:", tex)
+			send(blit, "endEncoding")
+		}
 		send(cb, "commit")
 		send(cb, "waitUntilCompleted")
 		if int(send(cb, "status")) == statusError {

@@ -60,6 +60,10 @@ type host interface {
 	// as its language reads.
 	rightToLeft() bool
 	titleBar() TitleBar
+	// safeArea returns how far from the top, right, bottom and left edges
+	// the view lays itself out, past what the system covers
+	// (platform.InsetSurface).
+	safeArea() [4]float32
 	// vibrancy reports whether the window shows a material where the
 	// frames are transparent.
 	vibrancy() bool
@@ -380,8 +384,12 @@ type engine struct {
 	tips       tooltips
 	scrollDrag scrollDrag
 	// wheeling are the elements of the scroll containers that the notches
-	// of a mouse wheel scroll smoothly (glideWheels).
+	// of a mouse wheel scroll smoothly, or a fling (glideWheels).
 	wheeling []uint64
+	// touch follows a finger on a touch screen (touch.go), and fingers
+	// tells that the pointer event being handled is a finger's.
+	touch   touchPan
+	fingers bool
 	// lastPress is the element of the press (id) and of the one before
 	// (prev), and how many of the backend's count of clicks were before
 	// the first on it.
@@ -494,6 +502,7 @@ func (rt *engine) runFrame() {
 	appW := rt.insp.contentWidth(w)
 	rt.insp.lap(-1)
 	rt.c.titleBar = rt.host.titleBar()
+	rt.c.safe = rt.host.safeArea()
 	rt.c.vibrancy = rt.host.vibrancy()
 	rt.text.BeginFrame()
 	rt.gen = rt.text.Generation()

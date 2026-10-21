@@ -28,6 +28,8 @@ type context struct {
 	now      time.Time
 	w, h     float32
 	titleBar TitleBar
+	// safe is the root's padding: the safe area of the window.
+	safe     [4]float32
 	vibrancy bool
 	overlay  *node
 	nextKey  any
@@ -136,6 +138,9 @@ func (c *context) reset(now time.Time, w, h float32) {
 	root.width, root.height = px(w), px(h)
 	root.st = c.rt.stateFor(root.id)
 	root.bg = c.theme.Background
+	// The view lays itself out within the safe area, while the window's
+	// background fills the rest.
+	root.pad = c.safe
 	root.ts = textStyle{set: setColor | setSize | setFamily, color: c.theme.Text, size: c.theme.FontSize, family: c.theme.Font}
 	if c.rt.lang != "" {
 		// Text is in the language the app shows unless told otherwise.

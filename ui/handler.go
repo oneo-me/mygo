@@ -79,6 +79,10 @@ type InputEvent struct {
 	Precise bool
 	// Scale is what InputZoom zooms by.
 	Scale float32
+	// Touch marks the pointer events and scrolls of a finger on a touch
+	// screen, which hovers nothing: a finger panning an element handling
+	// its input, which it pressed, scrolls it unless it takes the press.
+	Touch bool
 	// Start and End are the runes InputSelect selects.
 	Start, End int
 	// Time is when the event came, by the clock of the window's frames
@@ -145,6 +149,10 @@ func (rt *engine) deliver(s *state, ev InputEvent) bool {
 	}
 	ev.X, ev.Y = s.local(rt.pointerX, rt.pointerY)
 	ev.Time = rt.now()
+	switch ev.Kind {
+	case InputPointerDown, InputPointerMove, InputPointerUp, InputScroll:
+		ev.Touch = ev.Touch || rt.fingers
+	}
 	if ev.Kind == InputScroll {
 		ev.DX, ev.DY = s.vector(rt.pointerX, rt.pointerY, ev.DX, ev.DY)
 	}

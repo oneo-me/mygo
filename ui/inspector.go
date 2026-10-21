@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"hash/maphash"
 	"math"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -219,7 +218,7 @@ func (rt *engine) inspectKey(mods Modifiers, key Key) bool {
 	if !in.enabled {
 		return false
 	}
-	mac := runtime.GOOS == "darwin"
+	mac := apple
 	switch {
 	case key == KeyF12 && mods == 0, key == KeyI && (mac && mods == Super|Alt || !mac && mods == Ctrl|Shift):
 		rt.toggleInspector()

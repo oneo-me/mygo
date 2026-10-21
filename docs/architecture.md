@@ -22,8 +22,11 @@ framework safely. Read it before changing anything under `internal/`.
 - **No cgo.** Everything builds with `CGO_ENABLED=0`, so any platform can be
   cross-compiled from any machine. Native APIs are called at run time through
   [purego](https://github.com/ebitengine/purego) (`dlopen` + assembly
-  trampolines) on macOS and Linux and through the `syscall` package on
-  Windows, never through `import "C"`.
+  trampolines) on macOS, iOS and Linux and through the `syscall` package on
+  Windows, never through `import "C"`. iOS is the one exception to building
+  anywhere: Go links `ios/arm64` only with the system's linker, which it
+  does only with cgo on, so builds for iOS use Xcode's clang on a Mac
+  (`CGO_ENABLED=1`, though nothing imports "C"; see [iOS](#ios-internalios)).
 - **Two kinds of windows.** Web pages show in the system webview:
   WKWebView on macOS, WebKitGTK 4.1 (4.0 as a fallback) on Linux, WebView2
   on Windows (amd64 and arm64); no browser engine is bundled. Native UI is
@@ -31,11 +34,13 @@ framework safely. Read it before changing anything under `internal/`.
   CPU, and text from the system's own engines (see [Native UI](#native-ui-ui));
   an app whose windows all show it needs no webview at all, and runs in
   browsers too, compiled to WebAssembly, on canvases drawn with WebGL 2
-  (see [Browsers](#browsers-internalweb)). On unsupported
-  platforms, 32-bit Windows and Linux among them, the `internal/unsupported`
-  backend makes `App.Run` fail with a clear error while everything still
-  compiles, so every file of a backend, and of the text engine it pairs
-  with, names the backend's architectures in its build constraint.
+  (see [Browsers](#browsers-internalweb)), and on iPhones and iPads, where
+  its windows may hold web views (see [iOS](#ios-internalios)). On
+  unsupported platforms, 32-bit Windows and Linux among them, the
+  `internal/unsupported` backend makes `App.Run` fail with a clear error
+  while everything still compiles, so every file of a backend, and of the
+  text engine it pairs with, names the backend's architectures in its
+  build constraint.
 - **Bun is dev tooling only.** It builds and tests the TypeScript bridge, and
   installs and runs the web template's tools (Vite, TypeScript, the
   mygo-cli package); projects of native UI need none. Nothing Bun-related
@@ -79,6 +84,7 @@ framework safely. Read it before changing anything under `internal/`.
 │   ├── linux/          Linux: GTK 3 + WebKitGTK through dlopen
 │   ├── windows/        Windows: Win32 + WebView2 through syscall and COM
 │   ├── web/            browsers (js/wasm): native UI on canvases, through syscall/js
+│   ├── ios/            iOS: native UI in UIKit's windows, and WKWebViews in it
 │   ├── unsupported/    stub for other platforms
 │   ├── fake/           in-memory backend for unit tests
 │   ├── watchdriver/    the goroutine that runs a backend's file watcher
@@ -147,7 +153,7 @@ framework safely. Read it before changing anything under `internal/`.
 ## Layers
 
 ```
- user code ──► package mygo ──► platform.Backend ──► darwin | linux | windows | web | unsupported
+ user code ──► package mygo ──► platform.Backend ──► darwin | linux | windows | web | ios | unsupported
                  ▲    │               ▲                  │
                  │    └─ handlers ────┘ (AppHandler,     └─ purego ─► AppKit/WebKit, GTK/WebKitGTK
                  │                       WindowHandler)
@@ -745,6 +751,123 @@ gained one field, `SurfaceNative.Canvas`.
   the router's first or after its last, as after a reload (which takes
   the number of the browser's entry for the router's), becomes the
   router's; a fragment typed in, without a state, is pushed.
+
+### iOS (`internal/ios`)
+
+With `GOOS=ios`, `backend_ios.go` picks `internal/ios`, which shows
+windows of native UI (`WindowOptions.Surface`) in a UIKit app, and web
+views in them (`Surface.NewWebView`); windows of web pages report
+`errNoPage`, and menus, trays, global shortcuts, notifications, file
+dialogs and file watches report `errUnsupported` or do nothing. Go's
+`darwin` build constraint holds for `ios` too: `backend_darwin.go` is
+`darwin && !ios`, and the packages shared with macOS tell iOS apart by
+`runtime.GOOS` (`internal/text`'s and `internal/gpu/metal`'s `mobile`,
+ui's `apple`). The Objective-C plumbing is a copy of `internal/darwin`'s
+own, smaller: `objc.go` loads UIKit in place of AppKit.
+
+- **Building.** Go links `ios/arm64` only with the system's linker, which
+  it does only with cgo on: builds for iOS set `CGO_ENABLED=1` and `CC` to
+  Xcode's clang, with the SDK and the target in `CGO_CFLAGS` and
+  `CGO_LDFLAGS` (`cmd/mygo/ios.go`'s `iosEnv`), though nothing imports
+  "C": the backend calls UIKit through purego as `internal/darwin` calls
+  AppKit. They need a Mac with Xcode.
+- **Lifecycle.** `Run` calls `UIApplicationMain`, which never returns, with
+  the app delegate `MyGoAppDelegate`; `Quit` exits the process once the
+  core ran its quit sequence (`Terminating`), as iOS has no event loop to
+  leave. The Info.plist `mygo build` writes has a scene manifest naming
+  `MyGoSceneDelegate`, as UIKit expects scenes of apps linked with recent
+  SDKs: the first window scene that connects makes the app ready
+  (`Ready`), and windows made before it show once it has; an app without
+  a manifest is ready as it launches, its windows on the main screen.
+  The scene's activation is `DidBecomeActive` and `DidResignActive`; the
+  app going to the background occludes every surface, as the GPU takes
+  no work from apps there, and coming back is `Activated`.
+- **Threading.** As on macOS, a `CFRunLoopSource` in the common modes runs
+  `Dispatch`, and `IsMainThread` asks `pthread_main_np`. `Step` runs the
+  main run loop in its default mode until it handled a source, and `Wake`
+  signals a second source that does nothing, which ends it.
+- **Windows** are UIWindows of the scene, filling it, whose root view
+  controller's view holds the surface over the web views. They stack in
+  the order they were shown, by window level, the last in front and the
+  key window; the others stay below it, occluded. The scene sizes them:
+  the options' sizes, positions and the methods setting them do nothing,
+  and the user closes no window. `Theme.SetSource` sets the windows'
+  `overrideUserInterfaceStyle`, which UIKit's views and the status bar
+  follow.
+- **The surface** is a view filling the root view, whose layer the Metal
+  renderer adds its CAMetalLayer to (`SurfaceNative.Layer`); the layer
+  does not resize with it, as AppKit's do, but `fit` sizes it each frame
+  to the view's bounds. Frames come from a `CADisplayLink` running while
+  frames follow each other (`PacedSurface`, as macOS's), at up to 120 Hz
+  on ProMotion displays, which `CADisableMinimumFrameDurationOnPhone` in
+  the Info.plist unlocks; a new size or scale (rotating) draws its frame
+  at once from `layoutSubviews`. The content lays itself out in the safe
+  area (`platform.InsetSurface`): past the status bar, the sensor housing
+  and the home indicator, and above the software keyboard, whose frame
+  `UIKeyboardWillChangeFrameNotification` tells; package ui pads its root
+  by it, while the window's background fills the whole surface.
+- **Touches** are the pointer (`Touch`): the first finger of a gesture
+  presses, moves and releases button 0, its `tapCount` the clicks, and
+  leaves as it lifts, as a finger hovers nothing; one the system takes
+  (`touchesCancelled:`) ends as `PointerCancel`, which clicks nothing.
+  Package ui scrolls under a finger that moves before what it pressed
+  takes the drag (see [Native UI](#native-ui-ui)). On an iPad, a mouse's
+  or a trackpad's touches (`UITouchTypeIndirectPointer`) are not
+  `Touch`, their secondary button is button 1, a `UIHoverGestureRecognizer`
+  moves the pointer, and a pan recognizer that takes no touches but the
+  scrolls of trackpads and wheels (`allowedScrollTypesMask`) is
+  `PointerScroll`, `Precise`.
+- **Keys** of hardware keyboards come as UIPresses to the first responder,
+  their UIKey's HID usage the physical key and its characters the
+  layout's key; UIKit repeats none, so a timer repeats a key the content
+  takes while it is held. Keys typing text while the content edits go on
+  to UIKit (`super`), which hands them to the input method.
+- **Text input.** A view at the caret (`MyGoTextInputView`) is the first
+  responder while the content edits text, which shows the software
+  keyboard, and the `UITextInput` of input methods: its document is the
+  text around the caret, the marked text in place of the selection, as
+  `internal/darwin`'s NSTextInputClient has it, or a `TextInputClient`'s
+  own, positions (`MyGoTextPosition`) and ranges (`MyGoTextRange`)
+  carrying UTF-16 offsets in ivars. The software keyboard's Return and
+  Tab, which it types as text, are keys, and its delete key is
+  Backspace; `unmarkText` commits the composition, as UIKit's text views
+  do. Changes of the text that are not the input method's tell its
+  delegate (`textWillChange:` and the like), so that the keyboard reads
+  the text again. The view asks for none of UIKit's corrections:
+  autocorrection, capitalization and smart punctuation are off.
+- **Web views** are WKWebViews in clip views under the surface, whose
+  `hitTest:withEvent:` lets touches through where the content shows them;
+  the first hit test of a touch there tells the content (`WebViewPress`).
+  Their delegate is the navigation, UI and script message delegate of
+  macOS's, whose pages' alerts, confirmations and prompts are
+  UIAlertControllers; `PrintToPDF` is `createPDFWithConfiguration:`; the
+  inspector is Safari's on a Mac, for an inspectable web view
+  (`PageOptions.DevTools`), which the app cannot open; Tab does not move
+  into a page's elements.
+- **Assistive technology.** The surface's view is the container of the
+  elements VoiceOver reads: once it asks (`accessibilityElements`), the
+  surface sends `AccessibilityOn`, and each tree becomes
+  `UIAccessibilityElement`s (`MyGoAccessElement`) of the nodes that say or
+  do something, in tree order, kept by ID, with the web views' WKWebViews
+  among them; a change of the elements posts
+  `UIAccessibilityLayoutChangedNotification`, and announcements
+  `UIAccessibilityAnnouncementNotification`. Activating an element
+  presses it or focuses it; adjustable ones increment and decrement.
+- **Drawing.** Metal draws, but the shaders compiled ahead of time are
+  macOS's, whose functions iOS loads but refuses: there the renderer
+  compiles the source, as a library older than its shader does on macOS.
+  Render targets take the default storage, shared, as iOS has no managed
+  storage. Text is Core Text's, with UIFont for the system font, and no
+  font smoothing, which iOS never applies.
+- **Services.** The clipboard is the general pasteboard, materialized as
+  it is written; `OpenExternal` is `openURL:options:completionHandler:`;
+  message boxes and context menus (`PopupMenu`, a nested loop until
+  dismissed) are alerts and action sheets; secrets are the app's Keychain
+  items; locale, regional formats, cookies and the network monitor are
+  macOS's code. `KeepAwake` disables the idle timer, `SetBadge` shows a
+  number on the icon (once the user allows notifications to badge it), and
+  `Preferences.TextScale` follows Dynamic Type, the body style's size
+  over its usual 17 points.
 
 ## IPC
 
@@ -2001,7 +2124,7 @@ either.
  view (Go) ──► ui: build, layout, paint ──► internal/scene ──► internal/gpu: d3d11 | metal | gl, or internal/raster
                  ▲       └─ internal/text: DirectWrite | Core Text | Pango | canvas, glyph and mask atlases
                  │
- internal/surface.Conn ◄── content.go (package mygo) ◄── platform.Surface: darwin | linux | windows | web | fake
+ internal/surface.Conn ◄── content.go (package mygo) ◄── platform.Surface: darwin | linux | windows | web | ios | fake
 ```
 
 - **The surface.** With `platform.WindowOptions.Surface`, a backend creates
@@ -2046,6 +2169,23 @@ either.
   `IDropTarget`) are `FileDragOver` events, whose answer the drag source
   shows, and a drop a `FileDrop`; files the content does not take go to
   `OnFileDrop`.
+- **Touch screens and safe areas.** A finger on a touch screen (iOS's)
+  is the pointer, marked `Touch`, and package ui's `touch.go`, which only
+  iOS builds link (`touch_on.go` sets the `fingers` hook; tests set it
+  too), handles its events. A finger presses what is under it as the
+  pointer does; once it moves 10 DIPs before what it pressed takes the
+  drag (an element `Draggable`, a slider, one handling its input, a
+  scroll bar), the press ends without a click (`cancelPress`) and the
+  finger pans the innermost container under the press that can go the way
+  it moved, the content following it, or else the innermost element
+  handling its input, which takes the moves as scrolls
+  (`InputEvent.Touch`). Lifting it flings the container on along an
+  exponential ease (`flingAnimation`, UIScrollView's normal deceleration)
+  by the wheel's glides (`glide`); a finger touching a container that
+  glides stops it and clicks nothing, while one elsewhere does.
+  `PointerCancel` ends a press without a click. A surface that is an
+  `InsetSurface` gives the content its safe area, which pads the root
+  element (`context.safe`), its background still filling the window.
 - **Assistive technology.** Once it asks for a surface's content, the
   backend sends `AccessibilityOn`, and the engine describes every frame
   (`ui/access.go`) as a `platform.AccessTree`: nodes in pre-order with
@@ -3143,7 +3283,8 @@ either.
   behind a small `engine` interface: DirectWrite on Windows
   (`IDWriteTextLayout`, with an `IDWriteTextRenderer` implemented in Go
   collecting its glyph runs), Core Text on macOS (`CTTypesetter`, with
-  `NSFont` for the system font's weights) and Pango on Linux (with
+  `NSFont` for the system font's weights) and iOS (with `UIFont`) and
+  Pango on Linux (with
   fontconfig and HarfBuzz underneath, as in GTK); in browsers, a canvas's
   2D context (`canvas_js.go`, see [Browsers](#browsers-internalweb)). They find the fonts, fall
   back to other fonts for what one lacks, shape, run the bidirectional
@@ -3416,7 +3557,8 @@ either.
     Xcode's `metal` tools), which
     spares a first launch the 100 to 150 ms Metal takes to compile the
     source until it has cached it; a library older than `shader.metal`
-    falls back to that, and its test fails. It draws into a CAMetalLayer
+    falls back to that, and its test fails, as iOS always does (the
+    library is macOS's). It draws into a CAMetalLayer
     it adds to the surface view's layer. The command queue, shaders,
     sampler and placeholder texture are made on demand. A frame that
     changes the layer (its size, scale or pixel format), or shows web
@@ -3675,6 +3817,23 @@ renderer's (`gputest.Compare`).
   loop does, and tells pages through server-sent events (`/__mygo/events`):
   `reload` after a build, `build-error` with the compiler's output, which
   the page shows over the app until a build compiles.
+- iOS (`ios.go`): `build -platform ios` compiles the app for devices with
+  Xcode's clang and SDK (`iosEnv`, cgo on for the linker alone), into an
+  `.app` whose files are at the top, as iOS bundles have them: the
+  executable, the resources, the localizations, icons resized from
+  `icon` (`AppIcon60x60@2x.png` and the like, named by `CFBundleIcons`,
+  without an asset catalog) and an Info.plist with the scene manifest the
+  backend needs. It signs it with `ios.signingIdentity`, the profile
+  embedded and the entitlements it grants (`security cms` and `plutil`),
+  and zips it into an `.ipa` (`Payload/`); without an identity it leaves
+  the app unsigned, which no device installs. `-platform ios-simulator`
+  builds for the simulator, signed ad hoc. `dev -ios` builds the
+  development app for a simulator (`ios.simulator`, else the one booted,
+  else the first iPhone, booted then), installs it with `simctl`, launches
+  it with its console (`simctl launch --console-pty`, the app's
+  environment in `SIMCTL_CHILD_` variables), and rebuilds and relaunches
+  it on the watcher's changes, after the dev server is up as for the
+  desktop.
 - `init` renders `cmd/mygo/template`: a Go module and a TypeScript frontend
   built with Vite, side by side at the project root like the examples, draws
   a default icon at `resources/icon.png`, fetches modules, installs the
@@ -3940,6 +4099,17 @@ shader generation commands are listed in [AGENTS.md](../AGENTS.md).
 | plugins | `go test ./plugins/...` | the fetch plugin against `httptest` servers, the WebSocket client against a test server (ordering, fragments, pings, closing handshakes); the terminal's binding of libghostty-vt (layouts, rendering, encoders, selections), its pseudo-terminals, and its view through `Tester` with real shells: typing, keys as programs ask, input methods, mouse reports, selecting and copying, pasting, scrollback, exits (the library is downloaded, or named by `MYGO_GHOSTTY_VT`; `-short` skips them) |
 | native UI | `go test ./ui ./internal/text ./internal/scene ./internal/raster ./internal/svg ./internal/gpu/...` | the GPU renderers against the CPU renderer (Direct3D on Windows, Metal on macOS, OpenGL on Linux); views through `Tester`: input, focus, editing, lists, overlays, frames that fill the glyph atlas; text layout and caret geometry; atlas zones and repacking; the CPU renderer against its formulas; SVG parsing and drawing, with `FuzzParse`; `go test -run '^$' -bench . ./ui` times a frame |
 | GUI | `MYGO_E2E=1 go test ./internal/e2e` | the real backend: IPC, channels, protocol, Eval, geometry, capture, menus, window.open, native UI (frames, clicks, input methods replacing typed text, file drops, assistive technology reading and acting; on macOS typing, skipped while an input method is selected, and composing; on Linux with `MYGO_GPU=1`, what OpenGL drew in the GtkGLArea, from the first frame and once a window drawing in memory asks for the GPU); on Windows too (a GitHub Actions `windows-latest` runner has WebView2) |
+
+iOS has no GUI tests: `ui`'s tests cover the touch handling and the safe
+area (`touch_test.go`, through `Tester`'s events), `cmd/mygo`'s the
+bundle, the Info.plist and the `.ipa`, and `internal/ios`'s own the keys,
+the input methods' document and the accessibility elements, run in a
+booted simulator (`sh scripts/ios.sh go test -exec 'xcrun simctl spawn
+booted' ./internal/ios`; `scripts/ios.sh` sets the environment that
+compiles for the simulator with Xcode's clang). The backend itself is tried in the
+simulator (`go run ./cmd/mygo dev -ios examples/counter-native`), whose
+taps, typing and rotations an XCUITest runner can drive, as nothing in
+`simctl` sends them.
 
 Browsers run the `js` tests of the renderer, the text engine and package
 ui: `GOOS=js GOARCH=wasm go test -c` builds a test binary, which a page
@@ -4277,8 +4447,8 @@ which npm allows only for packages that exist: the first release uses an
    need: main-thread only, synchronous, or with a callback that runs on the
    main thread exactly once.
 3. **Implement it in every backend**: `darwin`, `linux`, `windows`, `web`,
-   `fake` and `unsupported` (return `platform.ErrUnsupported` or a zero
-   value).
+   `ios`, `fake` and `unsupported` (return `platform.ErrUnsupported` or a
+   zero value).
    Create callbacks once, never per call.
 4. **Wire the core**: hop with `onMain`/`onMainValue`, or `postMain` + `await`
    + `deliver` for asynchronous native results. Start with `needsApp` when
@@ -4299,6 +4469,9 @@ which npm allows only for packages that exist: the first release uses an
 <!-- repository-only:end -->
 
 ## Platform differences
+
+Browsers and iOS, which show native UI alone, are described in their own
+sections: [Browsers](#browsers-internalweb), [iOS](#ios-internalios).
 
 | feature | macOS | Linux | Windows |
 |---|---|---|---|

@@ -44,6 +44,7 @@ type headless struct {
 	// posts them to the main thread.
 	later  []func()
 	bar    TitleBar
+	safe   [4]float32
 	access *platform.AccessTree
 	// told are the announcements of the trees, and announced those the
 	// view made.
@@ -164,6 +165,7 @@ func (h *headless) preferences() platform.Preferences { return h.prefs }
 func (h *headless) locale() string                    { return h.lang }
 func (h *headless) region() i18n.Region               { return h.reg }
 func (h *headless) titleBar() TitleBar                { return h.bar }
+func (h *headless) safeArea() [4]float32              { return h.safe }
 func (h *headless) vibrancy() bool                    { return h.material }
 func (h *headless) invalidate() {
 	h.invalidated.Store(true)
@@ -377,6 +379,14 @@ func (t *Tester) SetScale(scale float32) {
 func (t *Tester) SetTitleBar(bar TitleBar) {
 	t.h.bar = bar
 	t.Frame()
+}
+
+// SetSafeArea sets how far from each edge of the window the view lays
+// itself out, past what the system covers, as a phone's status bar and
+// home indicator, and its keyboard.
+func (t *Tester) SetSafeArea(top, right, bottom, left float32) {
+	t.h.safe = [4]float32{top, right, bottom, left}
+	t.settle()
 }
 
 // SetVibrancy sets whether the window shows a material where the view

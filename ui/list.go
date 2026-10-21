@@ -3,7 +3,6 @@ package ui
 import (
 	"math"
 	"math/bits"
-	"runtime"
 	"slices"
 	"strings"
 )
@@ -956,7 +955,7 @@ func (f *listFrame) toggle(i int) {
 // extend chooses the rows from the pivot to row i, as Shift does: on
 // macOS in place of those it last chose, elsewhere in place of all others
 // unless keep.
-func (f *listFrame) extend(i int, keep bool) { f.extendBy(i, keep, runtime.GOOS == "darwin") }
+func (f *listFrame) extend(i int, keep bool) { f.extendBy(i, keep, apple) }
 
 // extendBy is extend, choosing the rows from the pivot to row i in place
 // of those it last chose with span, else in place of all others unless
@@ -1153,7 +1152,7 @@ func (f *listFrame) page(d int) int {
 // navigate moves the choice with the keys, past headers.
 func (f *listFrame) navigate() {
 	o, n, sel, s := f.owner, f.n, f.s.cursor(), f.s
-	multi, mac := s.Selection != nil, runtime.GOOS == "darwin"
+	multi, mac := s.Selection != nil, apple
 	if s.Label != nil {
 		o.flags |= flagTypeSelect
 	}

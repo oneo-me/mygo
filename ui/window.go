@@ -735,6 +735,15 @@ func (h *windowHost) titleBar() TitleBar {
 	return TitleBar{Height: float32(t.Height), Left: float32(t.Left), Right: float32(t.Right)}
 }
 
+func (h *windowHost) safeArea() [4]float32 {
+	s, ok := h.conn.Surface.(platform.InsetSurface)
+	if !ok {
+		return [4]float32{}
+	}
+	top, right, bottom, left := s.SafeArea()
+	return [4]float32{float32(top), float32(right), float32(bottom), float32(left)}
+}
+
 func (h *windowHost) vibrancy() bool {
 	s, ok := h.conn.Surface.(platform.MaterialSurface)
 	return ok && s.ShowsMaterial()

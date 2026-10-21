@@ -53,7 +53,11 @@ func wheelMoves(s *state, dx, dy float32) bool {
 
 // wheelScroll scrolls container s by a notch of dx, dy smoothly, on top
 // of the notches on their way there.
-func (rt *engine) wheelScroll(s *state, dx, dy float32) {
+func (rt *engine) wheelScroll(s *state, dx, dy float32) { rt.glide(s, dx, dy, wheelAnimation) }
+
+// glide scrolls container s by dx, dy along a, on top of what glides it
+// already: notches of a wheel, a fling.
+func (rt *engine) glide(s *state, dx, dy float32, a Animation) {
 	now := rt.now()
 	g := s.wheel
 	if g == nil {
@@ -72,10 +76,10 @@ func (rt *engine) wheelScroll(s *state, dx, dy float32) {
 	g.x.advance(now)
 	g.y.advance(now)
 	if dx != 0 {
-		g.x.retarget(g.x.target+float64(dx), wheelAnimation)
+		g.x.retarget(g.x.target+float64(dx), a)
 	}
 	if dy != 0 {
-		g.y.retarget(g.y.target+float64(dy), wheelAnimation)
+		g.y.retarget(g.y.target+float64(dy), a)
 	}
 	rt.requestFrame()
 }

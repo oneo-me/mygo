@@ -3,7 +3,7 @@
 MyGo is a desktop application framework in Go. Windows show web pages in the
 system webview (WKWebView on macOS, WebKitGTK on Linux, WebView2 on Windows),
 with typed Go ↔ TypeScript IPC, or native UI that MyGo draws itself (package
-`ui`).
+`ui`), which also runs in browsers and on iOS.
 
 **Read [docs/architecture.md](docs/architecture.md) before changing code.** It
 describes the layers, the threading model, native interop without cgo, the IPC
@@ -12,8 +12,10 @@ wire protocol, TypeScript generation, and the checklist for adding features.
 ## Hard rules
 
 - **No cgo.** Everything must build with `CGO_ENABLED=0`. Call native code
-  through purego (`internal/darwin`, `internal/linux`) or `syscall`
-  (`internal/windows`), never `import "C"`.
+  through purego (`internal/darwin`, `internal/ios`, `internal/linux`) or
+  `syscall` (`internal/windows`), never `import "C"`. The one exception is
+  linking for iOS, which Go does only with cgo on: iOS builds set
+  `CGO_ENABLED=1` with Xcode's clang, and still nothing imports "C".
 - **Bun is dev tooling only.** The repository is a Bun workspace
   (`packages/bridge`, `packages/runtime`, `packages/cli` with its platform
   packages, the plugins' packages in `plugins/`, and examples with a frontend, which keep it at their root like
@@ -23,7 +25,9 @@ wire protocol, TypeScript generation, and the checklist for adding features.
   native UI that MyGo draws itself (`WindowOptions.Content`, package `ui`;
   see "Native UI" in the architecture guide), which also runs in browsers
   (`GOOS=js GOARCH=wasm`, `internal/web`, drawn with WebGL 2 by the GL
-  renderer; see "Browsers"). The bundled CEF option is out of scope until
+  renderer; see "Browsers"), and on iOS (`GOOS=ios`, `internal/ios`:
+  native UI in UIKit's windows, with web views in it, but no windows of
+  web pages; see "iOS"). The bundled CEF option is out of scope until
   asked. Other platforms must keep compiling through
   `internal/unsupported`.
 - **Great DX over Electron parity.** Keep the familiar feel (app lifecycle,
@@ -55,6 +59,8 @@ go build ./... && GOOS=linux go build ./... && GOOS=windows go build ./...  # al
 go vet ./... && GOOS=linux go vet ./... && GOOS=windows go vet ./...
 go vet -tags mygo_noinspector ./...        # production builds, without the inspector of native UI
 GOOS=js GOARCH=wasm go vet $(GOOS=js GOARCH=wasm go list ./... | grep -v /cmd/mygo)  # browsers, all but the CLI
+sh scripts/ios.sh go vet ./...             # iOS, for the simulator (on a Mac with Xcode)
+sh scripts/ios.sh go test -exec 'xcrun simctl spawn booted' ./internal/ios  # iOS backend's tests, in the booted simulator
 go test ./...                              # core (fake backend), tsgen, CLI, accelerator
 go build -trimpath -tags mygo_noinspector -ldflags "-s -w -X github.com/egoist/mygo.production=1" -o /tmp/counter-native ./examples/counter-native  # an app's release size, as the benchmarks build it
 MYGO_E2E=1 go test ./internal/e2e          # real GUI tests (macOS desktop session)
@@ -64,8 +70,10 @@ bun run --cwd packages/cli binaries        # cross-compile the CLI into the mygo
 go run ./cmd/mygo generate examples/todo   # regenerate an example's TypeScript client
 go run ./cmd/mygo dev examples/todo        # live reload (dev bundle in examples/todo/.mygo)
 go run ./cmd/mygo dev -web examples/counter-native   # native UI in the browser, with live reload
+go run ./cmd/mygo dev -ios examples/counter-native   # native UI in the iOS simulator, with live reload
 go run ./cmd/mygo build examples/todo      # .app + .dmg in examples/todo/build
 go run ./cmd/mygo build -platform web examples/counter-native   # a static site in examples/counter-native/dist/web
+go run ./cmd/mygo build -platform ios,ios-simulator examples/counter-native   # .app and .ipa in examples/counter-native/dist/ios-*
 go run ./examples/gallery                  # the native UI toolkit's tour
 go run ./examples/code-editor              # the code editor and the diff viewer (ui/editor)
 go run ./examples/markdown-chat            # Markdown replies streaming in (ui/markdown)
@@ -95,7 +103,7 @@ Windows GUI tests need Windows with the WebView2 Runtime (a GitHub Actions
   benchmarks branch's commits say it.
 - New behavior goes into `package mygo` first; backends only translate
   `internal/platform` calls to native ones. Implement every platform method in
-  `darwin`, `linux`, `windows`, `web`, `fake` and `unsupported`.
+  `darwin`, `linux`, `windows`, `web`, `ios`, `fake` and `unsupported`.
 - Objective-C: `alloc`/`init` objects are owned and must be released; wrap
   temporary objects in `withPool`; copy blocks you call later.
 - Official plugins live in `plugins/<name>`: the Go package and its npm

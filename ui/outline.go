@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"runtime"
 	"time"
 )
 
@@ -247,7 +246,7 @@ func (s *OutlineState[K]) keys(owner *node, children func(K) []K) {
 // macOS, Shift elsewhere, as in GTK, where Alt and the arrows go back and
 // forward.
 var allMod = func() Modifiers {
-	if runtime.GOOS == "darwin" {
+	if apple {
 		return Alt
 	}
 	return Shift

@@ -111,7 +111,8 @@ What every app has, whether its windows show native UI or web pages.
 
 [Native UI](ui/README.md) has documentation of its own: guides to views,
 layout, input, navigation and accessibility, and a page for each of its
-components, from buttons to tables.
+components, from buttons to tables. Apps of native UI also run in
+[browsers](ui/browsers.md) and on [iPhones and iPads](ui/ios.md).
 
 ## Web pages
 
@@ -126,7 +127,7 @@ components, from buttons to tables.
 ## Shipping
 
 - [Building and distributing](distribution.md): packaged apps for macOS,
-  Windows and Linux, signing, installers and disk images.
+  Windows, Linux and iOS, signing, installers and disk images.
 - [Auto-updates](updates.md): signed updates from GitHub releases, an S3
   bucket or your own server, delta updates, and an update window in the
   manner of Sparkle.

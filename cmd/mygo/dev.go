@@ -44,6 +44,13 @@ the app for them (GOOS=js GOARCH=wasm), serves it at http://localhost:<port>,
 opens it, and rebuilds it as its code changes, which reloads the page; the
 page shows why a build failed.
 
+With -ios, it develops an app of native UI in the iOS simulator instead
+(-simulator, else ios.simulator in mygo.json, else the one booted, else an
+iPhone): it
+builds the development app for it, installs and launches it, its output in
+the console, and rebuilds and relaunches it as its code changes. It needs
+a Mac with Xcode.
+
 With -lang, the app runs in that language, a BCP 47 tag such as de or
 zh-Hant, or a pseudo locale: en-XA (accented and longer text) or ar-XB
 (right to left), which test layouts without translations. It does not
@@ -51,6 +58,8 @@ keep it: the app's own setting is left as it is.`)
 	skipDevCommand := flags.Bool("skip-dev-command", false, "do not run devCommand")
 	sign := flags.String("sign", "-", "macOS signing identity for the development app")
 	web := flags.Bool("web", false, "develop the app in browsers")
+	ios := flags.Bool("ios", false, "develop the app in the iOS simulator")
+	sim := flags.String("simulator", "", "with -ios, the simulator to run the app in, by name or UDID (default: ios.simulator, else the one booted, else an iPhone)")
 	port := flags.Int("port", 5174, "with -web, the port to serve the app at, or the next free one")
 	openPage := flags.Bool("open", true, "with -web, open the app in the browser")
 	lang := flags.String("lang", "", "run the app in this language (as de, or the pseudo locales en-XA and ar-XB), without keeping it")
@@ -178,6 +187,12 @@ keep it: the app's own setting is left as it is.`)
 	}
 	if c.DevURL == "" && c.FrontendDist != "" {
 		s.env = append(s.env, "MYGO_FRONTEND_DIST="+c.path(c.FrontendDist))
+	}
+	if *ios {
+		if *sim != "" {
+			c.IOS.Simulator = *sim
+		}
+		return runIOSDev(ctx, c, s.env)
 	}
 	return s.run(ctx, c)
 }

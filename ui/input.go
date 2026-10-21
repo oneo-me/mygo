@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"runtime"
 	"slices"
 	"time"
 
@@ -32,6 +31,9 @@ func (rt *engine) event(ev platform.SurfaceEvent) (taken bool) {
 	switch ev.Kind {
 	case platform.PointerMove, platform.PointerDown, platform.PointerUp, platform.PointerScroll, platform.PointerZoom:
 		rt.mods = Modifiers(ev.Mods)
+		rt.fingers = ev.Touch
+	case platform.PointerCancel:
+		rt.fingers = ev.Touch
 	}
 	switch ev.Kind {
 	case platform.SurfaceFrame:
@@ -44,14 +46,18 @@ func (rt *engine) event(ev platform.SurfaceEvent) (taken bool) {
 			rt.held = false
 			rt.requestFrame()
 		}
-	case platform.PointerMove:
+	case platform.PointerDown, platform.PointerMove, platform.PointerUp, platform.PointerCancel:
+		if fingers != nil && (ev.Touch || ev.Kind == platform.PointerCancel) {
+			fingers(rt, ev, x, y)
+			break
+		}
 		rt.pointerMove(x, y)
-	case platform.PointerDown:
-		rt.pointerMove(x, y)
-		rt.pointerDown(x, y, ev.Button, Modifiers(ev.Mods), ev.Clicks)
-	case platform.PointerUp:
-		rt.pointerMove(x, y)
-		rt.pointerUp(ev.Button, ev.Clicks)
+		switch ev.Kind {
+		case platform.PointerDown:
+			rt.pointerDown(x, y, ev.Button, Modifiers(ev.Mods), ev.Clicks)
+		case platform.PointerUp:
+			rt.pointerUp(ev.Button, ev.Clicks)
+		}
 	case platform.WebViewPress:
 		rt.webViewPress(x, y, ev.Button)
 	case platform.PointerLeave:
@@ -577,9 +583,9 @@ func (rt *engine) scrollKey(mods Modifiers, key Key) bool {
 		page = 1
 	case mods == 0 && key == KeyPageUp, mods == Shift && key == KeySpace:
 		page = -1
-	case (mods == 0 || mods == Cmd) && key == KeyHome, mods == Cmd && key == KeyUp && runtime.GOOS == "darwin":
+	case (mods == 0 || mods == Cmd) && key == KeyHome, mods == Cmd && key == KeyUp && apple:
 		dy = -far
-	case (mods == 0 || mods == Cmd) && key == KeyEnd, mods == Cmd && key == KeyDown && runtime.GOOS == "darwin":
+	case (mods == 0 || mods == Cmd) && key == KeyEnd, mods == Cmd && key == KeyDown && apple:
 		dy = far
 	default:
 		return false

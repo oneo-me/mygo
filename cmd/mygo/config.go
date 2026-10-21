@@ -84,6 +84,7 @@ type Config struct {
 	// Updates configures signed updates, which mygo.Updater installs.
 	Updates *Updates `json:"updates"`
 	MacOS   MacOS    `json:"macos"`
+	IOS     IOS      `json:"ios"`
 	Windows Windows  `json:"windows"`
 	Linux   Linux    `json:"linux"`
 
@@ -183,6 +184,32 @@ type MacOS struct {
 	// Notarize submits production disk images to Apple's notary service and
 	// staples the ticket. It needs a Developer ID signing identity.
 	Notarize *Notarize `json:"notarize"`
+}
+
+// IOS configures iOS packaging (mygo build -platform ios), and the
+// simulator mygo dev -ios runs the app in.
+type IOS struct {
+	// MinimumOSVersion is the oldest iOS version supported (default
+	// "15.0").
+	MinimumOSVersion string `json:"minimumOSVersion"`
+	// SigningIdentity signs the app for devices, e.g. "Apple Development:
+	// Jane Doe (TEAMID)". Without it, builds for devices are left unsigned,
+	// which no device installs; builds for the simulator are signed ad hoc.
+	SigningIdentity string `json:"signingIdentity"`
+	// ProvisioningProfile is the .mobileprovision embedded in the app for
+	// devices, which must allow its identifier, devices and signing
+	// identity.
+	ProvisioningProfile string `json:"provisioningProfile"`
+	// Entitlements is a plist of entitlements to sign the app for devices
+	// with (default: all those its provisioning profile grants).
+	Entitlements string `json:"entitlements"`
+	// InfoPlist holds extra keys for the Info.plist of the bundle, which
+	// replace MyGo's own, e.g. usage descriptions:
+	//   "NSCameraUsageDescription": "Scan documents with the camera."
+	InfoPlist map[string]any `json:"infoPlist"`
+	// Simulator is the simulator mygo dev -ios runs the app in, by name or
+	// UDID (default: the one booted, else the first iPhone).
+	Simulator string `json:"simulator"`
 }
 
 // Notarize holds notarytool credentials stored in the keychain with
@@ -337,6 +364,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.MacOS.DMGTitle == "" {
 		c.MacOS.DMGTitle = c.Name
+	}
+	if c.IOS.MinimumOSVersion == "" {
+		c.IOS.MinimumOSVersion = "15.0"
 	}
 	if c.Linux.Maintainer == "" {
 		c.Linux.Maintainer = packageAuthor(c.root)

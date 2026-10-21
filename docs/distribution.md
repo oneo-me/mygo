@@ -47,6 +47,7 @@ when cross-compiling, set `CC` to a suitable cross compiler.
 | macOS | `My App.app`, signed, and `My App 0.1.0 arm64.dmg` (`My App 0.1.0.dmg` for `darwin/universal`) |
 | Windows | `My App.exe`, the files of the app, and the installer `My App Setup 0.1.0 amd64.exe` |
 | Linux | `my-app`, `my-app.desktop`, `my-app.png`, `my-app.xml` for the file types the app defines, the files of the app, their archive `my-app-0.1.0-linux-amd64.tar.gz` with [`install.sh`](#the-install-script), and the Debian package `my-app_0.1.0_amd64.deb` |
+| iOS (`ios`, `ios-simulator`) | `My App.app` in `ios-arm64/`, signed for devices, and `My App 0.1.0.ipa`; `My App.app` in `ios-simulator-arm64/`. See [iOS](#ios) |
 
 Other flags: `-debug` keeps development features such as the inspector,
 `-skip-dmg` and `-skip-notarize` skip those steps, `-sign` overrides the
@@ -152,7 +153,7 @@ resources/
 ```
 
 They are named like the targets of `-platform`: a system, `darwin`,
-`linux` or `windows`, for all of its apps, or a system and an
+`ios`, `linux` or `windows`, for all of its apps, or a system and an
 architecture, as in `darwin-arm64` or `windows-amd64`, for one. An app
 ships the platform directories of its target merged with the other
 resources, so the Linux x86-64 app above has `data/seed.db` and its own
@@ -363,6 +364,29 @@ watches the profile and rebuilds when it changes.
 Keep profiles out of version control and provide their paths through the
 build environment. See Apple's
 [Inside code signing: provisioning profiles](https://developer.apple.com/documentation/technotes/tn3125-inside-code-signing-provisioning-profiles).
+
+## iOS
+
+Apps of [native UI](ui/ios.md) also build for iPhones and iPads, with
+`-platform ios` for devices and `-platform ios-simulator` for the
+simulator, on a Mac with Xcode: Go links iOS apps only with the system's
+linker, which it reaches through cgo, so these builds turn cgo on with
+Xcode's clang, whatever `CGO_ENABLED` says. The `.app` has its files at
+its top, as iOS bundles do: the executable, the resources (the `ios`
+platform directories too, and `PathResources` is the bundle), the
+localizations, the icon resized for iPhones and iPads, and an Info.plist
+with the scene manifest the app needs, which `ios.infoPlist` adds keys
+to, such as the usage descriptions of what the app's pages ask for.
+
+Devices install apps signed for them: `ios.signingIdentity`, an Apple
+Development or Distribution certificate, signs the app, with
+`ios.provisioningProfile` embedded as `embedded.mobileprovision` and the
+entitlements the profile grants, or those of `ios.entitlements`. Without
+an identity, the app for devices is left unsigned. The `.ipa` holds the
+app as App Store Connect and other installers take it; App Store
+submission also checks what Xcode's archives carry, such as an asset
+catalog of icons, which these builds do not make yet. See
+[Native UI on iOS](ui/ios.md).
 
 ## Windows
 

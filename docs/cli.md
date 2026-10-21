@@ -121,14 +121,19 @@ stay apart from the installed app's. On macOS it is a real app bundle, in
 `.mygo/dev`; on Windows its executable carries the icon, manifest and
 version information that `mygo build` embeds.
 
-| Flag | |
-|---|---|
 With `-web`, mygo dev develops an app of [native UI in browsers](ui/browsers.md)
 instead: it compiles the app to WebAssembly, serves it at
 `http://localhost:5174` (or the next free port), opens it, and rebuilds it as
 its Go code changes, which reloads the page. A build that fails to compile
 leaves the page running the last one, and shows why over it until a fix
 compiles. `o` opens the page again.
+
+With `-ios`, mygo dev develops an app of [native UI on iOS](ui/ios.md)
+instead: it builds the development app for the simulator `-simulator` or
+`ios.simulator` names, else the one booted, else the first iPhone, which it
+boots; installs it, launches it with its output in the console, and
+rebuilds and relaunches it as its Go code changes. A build that fails to compile leaves
+the last one running. It needs a Mac with Xcode.
 
 | Flag | |
 |---|---|
@@ -137,6 +142,8 @@ compiles. `o` opens the page again.
 | `-web` | develops the app in browsers |
 | `-port` | with `-web`, the port to serve the app at, or the next free one (default: 5174) |
 | `-open` | with `-web`, opens the app in the browser (default: true) |
+| `-ios` | develops the app in the iOS simulator |
+| `-simulator` | with `-ios`, the simulator to run the app in, by name or UDID, such as `"iPhone 18 Pro"` (default: `ios.simulator`, else the one booted, else the first iPhone) |
 | `-lang` | runs the app in a language, such as `de` or `zh-Hant`, or a pseudo locale, `en-XA` or `ar-XB`, without changing the language it keeps; see [trying a language](i18n.md#trying-a-language) |
 
 ## mygo build
@@ -155,9 +162,16 @@ loads the app, Go's `wasm_exec.js`, the app's WebAssembly, named by its
 content so that it can be cached for good, and the icon. See
 [Browsers](ui/browsers.md).
 
+The platform `ios` builds an app of native UI for iPhones and iPads into
+`<out>/ios-arm64`: the `.app`, signed for devices with
+`ios.signingIdentity` and `ios.provisioningProfile`, or left unsigned
+without them, and `<name> <version>.ipa`. `ios-simulator` builds it for the
+simulator into `<out>/ios-simulator-<arch>`, signed ad hoc. Both need a Mac
+with Xcode. See [iOS](ui/ios.md).
+
 | Flag | |
 |---|---|
-| `-platform` | comma separated `GOOS/GOARCH` targets, e.g. `darwin/universal,windows/amd64,linux/amd64`, or `web` (default: this machine's) |
+| `-platform` | comma separated `GOOS/GOARCH` targets, e.g. `darwin/universal,windows/amd64,linux/amd64`, `web`, `ios` or `ios-simulator` (default: this machine's) |
 | `-debug` | keeps development features, such as the web inspector and the [inspector of native UI](ui/inspector.md) |
 | `-o` | the output directory (default: `out` of the configuration) |
 | `-sign` | the macOS signing identity (default: `macos.signingIdentity`) |

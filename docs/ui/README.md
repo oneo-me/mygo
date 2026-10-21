@@ -111,6 +111,8 @@ UI as they read other apps (see [Accessibility](accessibility.md)).
 - [Rendering](rendering.md): how MyGo draws, on the GPU or the CPU.
 - [Browsers](browsers.md): the same app in a page, compiled to
   WebAssembly and drawn with WebGL 2.
+- [iOS](ios.md): the same app on iPhones and iPads, with touch, the
+  software keyboard and web views.
 - [Migration](migration.md): element values, persistent handles, focus
   bindings and source migration.
 - [Performance](performance.md): measured frame costs and retained memory.

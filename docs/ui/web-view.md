@@ -3,7 +3,8 @@
 `ui.WebView` shows a web page in a window of native UI: a document the web
 engine renders beside native controls, a page per tab, a preview of HTML
 the app makes. The page is the system's web view (WKWebView, WebView2,
-WebKitGTK), made with `Window.NewWebView`, and works as a window's page
+WebKitGTK; on [iOS](ios.md), where windows of web pages do not open, the
+way to show one), made with `Window.NewWebView`, and works as a window's page
 does: it loads the app's frontend, calls bound Go methods with the typed
 client and hears events. What the view paints after the web view shows
 over the page: a menu opening from a button above it, a select's options,
@@ -231,6 +232,11 @@ native UI; MyGo does not draw it. As with SwiftUI's `WebView`:
 On Windows, WebView2 keeps the elements of a page it shows this way under
 a window of its own: Narrator finds the web view in place, and the page's
 elements in that window, not inside it.
+
+On iOS, a page lays itself out 980 points wide, as Safari's do, unless it
+has `<meta name="viewport" content="width=device-width">`; Tab does not
+move into its elements, and its inspector is Safari's, on a Mac, while
+`PageOptions.DevTools` is on.
 
 ## Testing
 

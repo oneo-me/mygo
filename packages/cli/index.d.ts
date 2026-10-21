@@ -106,6 +106,8 @@ export interface Config {
   updates?: UpdatesConfig;
   /** macOS packaging. */
   macos?: MacOSConfig;
+  /** iOS packaging, and the simulator `mygo dev -ios` runs the app in. */
+  ios?: IOSConfig;
   /** Windows packaging. */
   windows?: WindowsConfig;
   /** Linux packaging. */
@@ -214,6 +216,25 @@ export interface MacOSConfig {
   dmgTitle?: string;
   /** Notarizes production disk images. */
   notarize?: NotarizeConfig;
+}
+
+/** iOS packaging, and the simulator `mygo dev -ios` runs the app in. */
+export interface IOSConfig {
+  /** The oldest iOS the app runs on (default: `15.0`). */
+  minimumOSVersion?: string;
+  /**
+   * The identity that signs the app for devices, e.g. `Apple Development: Jane Doe (TEAMID)`.
+   * Without it, builds for devices are left unsigned; builds for the simulator are signed ad hoc.
+   */
+  signingIdentity?: string;
+  /** The `.mobileprovision` embedded in the app for devices, which must allow its identifier, devices and signing identity. */
+  provisioningProfile?: string;
+  /** A property list of entitlements to sign the app for devices with (default: those its provisioning profile grants). */
+  entitlements?: string;
+  /** Keys added to the app's Info.plist, replacing MyGo's, e.g. `NSCameraUsageDescription`. */
+  infoPlist?: Record<string, unknown>;
+  /** The simulator `mygo dev -ios` runs the app in, by name or UDID (default: the one booted, else the first iPhone). */
+  simulator?: string;
 }
 
 /** Credentials of `xcrun notarytool store-credentials <profile>`. */

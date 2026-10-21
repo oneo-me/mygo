@@ -3,7 +3,6 @@ package ui
 import (
 	"net/url"
 	"path"
-	"runtime"
 	"slices"
 	"strings"
 	"time"
@@ -588,7 +587,7 @@ func (r *Router) keys(c *context, box *node) {
 	// Right right to left, as in browsers.
 	left, right := box.arrows()
 	back, forward := [2]shortcut{{0, KeyBack}, {Alt, left}}, [2]shortcut{{0, KeyForward}, {Alt, right}}
-	if runtime.GOOS == "darwin" {
+	if apple {
 		back[1], forward[1] = shortcut{Super, KeyBracketLeft}, shortcut{Super, KeyBracketRight}
 	}
 	pressed := func(keys [2]shortcut) bool {
